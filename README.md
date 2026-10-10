@@ -55,7 +55,7 @@ eval/          trajectory evaluation scripts and results
 - [ ] Document video stream format
 - [ ] Control the drone from Python (keyboard)
 - [ ] Add failsafes (deadman timeout, throttle limit)
-- [ ] Display live video in OpenCV
+- [✓] Display live video in OpenCV
 - [ ] Calibrate camera (checkerboard)
 - [ ] Run ORB-SLAM3 offline on recorded flights
 - [ ] Vita controller app
