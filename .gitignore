@@ -1,0 +1,6 @@
+recordings/
+calib/
+packets.txt
+first_frame.jpg
+.venv/
+__pycache__/
