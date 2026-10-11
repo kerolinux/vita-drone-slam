@@ -1,0 +1,32 @@
+name: Build Vita app
+
+on:
+  push:
+    paths:
+      - "vita/**"
+      - ".github/workflows/build-vita.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install VitaSDK
+        run: |
+          git clone --depth 1 https://github.com/vitasdk/vdpm
+          export VITASDK="$HOME/vitasdk"
+          ./vdpm/bootstrap-vitasdk.sh --install-dir "$VITASDK"
+          echo "VITASDK=$VITASDK" >> "$GITHUB_ENV"
+          echo "$VITASDK/bin" >> "$GITHUB_PATH"
+
+      - name: Build the VPK
+        run: |
+          cmake -S vita -B vita/build
+          cmake --build vita/build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vita-drone-vpk
+          path: vita/build/*.vpk

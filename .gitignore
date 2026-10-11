@@ -4,3 +4,5 @@ packets.txt
 first_frame.jpg
 .venv/
 __pycache__/
+vita/build/
+trim.json
