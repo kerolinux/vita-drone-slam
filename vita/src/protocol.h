@@ -4,9 +4,13 @@
 #ifndef VD_PROTOCOL_H
 #define VD_PROTOCOL_H
 
+#include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #define VD_MESSAGE_LEN 12
+#define VD_VIDEO_HEADER_LEN 12
+#define VD_VIDEO_FLAG_LAST 0x01
 #define VD_VERSION 1
 
 enum {
@@ -68,6 +72,66 @@ static inline int vd_parse_telemetry(const uint8_t *in, int len, VdTelemetry *t)
     t->trim_yaw = (int8_t)in[9];
     t->age_tenths = in[10];
     return 1;
+}
+
+/* Video message: PC -> Vita. A few rows of the camera picture as RGB565 (little endian), see vitalink.py. */
+typedef struct {
+    uint8_t frame_id;
+    uint16_t width, height, row_start;
+    uint8_t rows, flags;
+} VdVideoHeader;
+
+/* Returns 1 if the packet is valid (fills h and points *pixels at the pixel data), 0 otherwise. */
+static inline int vd_parse_video(const uint8_t *in, int len, VdVideoHeader *h, const uint8_t **pixels) {
+    if (len < VD_VIDEO_HEADER_LEN || in[0] != 'D' || in[1] != 'F' || in[2] != VD_VERSION) return 0;
+    h->frame_id = in[3];
+    h->width = (uint16_t)(in[4] | (in[5] << 8));
+    h->height = (uint16_t)(in[6] | (in[7] << 8));
+    h->row_start = (uint16_t)(in[8] | (in[9] << 8));
+    h->rows = in[10];
+    h->flags = in[11];
+    if (h->rows < 1 || h->width < 1 || h->height < 1) return 0;
+    if ((int)h->row_start + h->rows > h->height) return 0;
+    if (len - VD_VIDEO_HEADER_LEN != (int)h->rows * h->width * 2) return 0;
+    *pixels = in + VD_VIDEO_HEADER_LEN;
+    return 1;
+}
+
+/* Largest whole-number zoom that fits a width x height picture into max_w x max_h; 0 if it does not fit. */
+static inline int vd_video_scale(int width, int height, int max_w, int max_h) {
+    if (width < 1 || height < 1) return 0;
+    int sx = max_w / width, sy = max_h / height;
+    return sx < sy ? sx : sy;
+}
+
+/* One RGB565 pixel -> the Vita framebuffer's 32-bit format (memory order R, G, B, A). */
+static inline uint32_t vd_rgb565_to_abgr(uint16_t v) {
+    uint32_t r = (v >> 11) & 0x1F, g = (v >> 5) & 0x3F, b = v & 0x1F;
+    r = (r << 3) | (r >> 2);
+    g = (g << 2) | (g >> 4);
+    b = (b << 3) | (b >> 2);
+    return 0xFF000000u | (b << 16) | (g << 8) | r;
+}
+
+/* Draw `rows` picture rows (first one is picture row row0) into a 32-bit framebuffer with `pitch` pixels per
+ * line, enlarged by the whole number `scale`. The framebuffer is only written, never read (reading video
+ * memory is slow). Returns 0 on success, -1 if anything would fall outside the picture or the screen. */
+static inline int vd_blit_rows(uint32_t *fb, int pitch, int fb_w, int fb_h, const uint8_t *src, int width,
+                               int height, int row0, int rows, int scale) {
+    uint32_t line[1024];
+    if (!fb || !src || scale < 1 || width < 1 || rows < 1 || row0 < 0) return -1;
+    if (row0 + rows > height || width * scale > fb_w || width * scale > pitch || width * scale > 1024) return -1;
+    if ((row0 + rows) * scale > fb_h) return -1;
+    for (int r = 0; r < rows; r++) {
+        const uint8_t *s = src + (size_t)r * width * 2;
+        for (int x = 0; x < width; x++) {
+            uint32_t px = vd_rgb565_to_abgr((uint16_t)(s[2 * x] | (s[2 * x + 1] << 8)));
+            for (int dx = 0; dx < scale; dx++) line[x * scale + dx] = px;
+        }
+        uint32_t *dst = fb + (size_t)(row0 + r) * scale * pitch;
+        for (int dy = 0; dy < scale; dy++) memcpy(dst + (size_t)dy * pitch, line, (size_t)width * scale * sizeof(uint32_t));
+    }
+    return 0;
 }
 
 /* Raw analog stick value (0..255, centre ~128) -> -127..127 with a dead zone of about 12 %. */

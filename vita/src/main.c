@@ -1,7 +1,8 @@
 /* Vita Drone Controller
  *
- * Sends the Vita's sticks and buttons to bridge.py on a PC over UDP, and shows the bridge's telemetry.
- * See ../README.md and ../../vitalink.py for the message format.
+ * Sends the Vita's sticks and buttons to bridge.py on a PC over UDP, shows the bridge's telemetry, and
+ * draws the drone's camera picture (sent by the bridge as small RGB565 images).
+ * See ../README.md and ../../vitalink.py for the message formats.
  *
  * Controls
  *   left stick   up/down = throttle, left/right = yaw
@@ -24,6 +25,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* debugScreen is compiled into this file (instead of being a separate source file) so that its framebuffer
+ * pointer `base` is visible: the camera picture is drawn straight into it. */
+#define DEBUG_SCREEN_CODE_INCLUDE
 #include "debugScreen.h"
 #include "protocol.h"
 
@@ -37,6 +41,19 @@
 #define SEND_PERIOD_US 20000   /* 50 control packets per second */
 #define DRAW_PERIOD_US 100000  /* 10 screen updates per second */
 #define LINK_TIMEOUT_US 1500000
+#define VIDEO_MAX_W 640        /* the picture area on screen: 640x480 at the top left */
+#define VIDEO_MAX_H 480
+#define VIDEO_TIMEOUT_US 2000000
+#define RX_BUFFER_BYTES (256 * 1024)
+#define MAX_PACKETS_PER_PASS 200
+
+/* Right-hand text column (x = 640): one line of text at the given row, then clear the rest of the line. */
+#define HUD(row, ...)                  \
+    do {                               \
+        printf("\e[%d;81H", (row));    \
+        printf(__VA_ARGS__);           \
+        printf("\e[K");                \
+    } while (0)
 
 typedef struct {
     int down;
@@ -93,6 +110,8 @@ static int net_setup(const char *pc_ip, SceNetSockaddrIn *pc) {
 
     int nonblocking = 1;
     sceNetSetsockopt(sock, SCE_NET_SOL_SOCKET, SCE_NET_SO_NBIO, &nonblocking, sizeof nonblocking);
+    int rcvbuf = RX_BUFFER_BYTES; /* video arrives in bursts; a big buffer stops packets being dropped */
+    sceNetSetsockopt(sock, SCE_NET_SOL_SOCKET, SCE_NET_SO_RCVBUF, &rcvbuf, sizeof rcvbuf);
 
     memset(pc, 0, sizeof *pc);
     pc->sin_family = SCE_NET_AF_INET;
@@ -135,8 +154,9 @@ int main(int argc, char *argv[]) {
     HoldButton hold_takeoff = {0, 0}, hold_calibrate = {0, 0}, hold_reset = {0, 0};
     VdTelemetry tel;
     memset(&tel, 0, sizeof tel);
-    uint64_t last_tel = 0;
-    int have_tel = 0;
+    uint64_t last_tel = 0, last_video = 0, fps_window = 0;
+    int have_tel = 0, have_video = 0;
+    unsigned video_w = 0, video_h = 0, video_frames = 0, video_fps = 0;
     uint8_t seq = 0, speed = 1;
     uint32_t prev_pad = 0;
     unsigned long sent = 0;
@@ -177,42 +197,71 @@ int main(int argc, char *argv[]) {
             sent++;
         }
 
-        /* Telemetry from the bridge (non-blocking socket: returns <= 0 when nothing is waiting). */
-        for (;;) {
-            uint8_t buf[64];
+        /* Packets from the bridge: telemetry and camera picture rows (non-blocking socket: returns <= 0 when
+         * nothing is waiting). */
+        for (int pass = 0; pass < MAX_PACKETS_PER_PASS; pass++) {
+            static uint8_t rx[1536];
             SceNetSockaddrIn from;
             unsigned int fromlen = sizeof from;
-            int n = sceNetRecvfrom(sock, buf, sizeof buf, 0, (SceNetSockaddr *)&from, &fromlen);
+            int n = sceNetRecvfrom(sock, rx, sizeof rx, 0, (SceNetSockaddr *)&from, &fromlen);
             if (n <= 0) break;
-            VdTelemetry t;
-            if (vd_parse_telemetry(buf, n, &t)) {
-                tel = t;
-                have_tel = 1;
-                last_tel = now;
+            if (n >= 2 && rx[0] == 'D' && rx[1] == 'F') {
+                VdVideoHeader vh;
+                const uint8_t *pixels;
+                if (vd_parse_video(rx, n, &vh, &pixels)) {
+                    int scale = vd_video_scale(vh.width, vh.height, VIDEO_MAX_W, VIDEO_MAX_H);
+                    if (scale > 0 && vd_blit_rows((uint32_t *)base, SCREEN_FB_WIDTH, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                                  pixels, vh.width, vh.height, vh.row_start, vh.rows, scale) == 0) {
+                        have_video = 1;
+                        last_video = now;
+                        video_w = vh.width;
+                        video_h = vh.height;
+                        if (vh.flags & VD_VIDEO_FLAG_LAST) video_frames++;
+                    }
+                }
+            } else {
+                VdTelemetry t;
+                if (vd_parse_telemetry(rx, n, &t)) {
+                    tel = t;
+                    have_tel = 1;
+                    last_tel = now;
+                }
             }
+        }
+        if (now - fps_window >= 1000000) {
+            video_fps = video_frames;
+            video_frames = 0;
+            fps_window = now;
         }
 
         if (now >= next_draw) {
             next_draw = now + DRAW_PERIOD_US;
             int link_ok = have_tel && (now - last_tel) < LINK_TIMEOUT_US;
-            printf("\e[1;1HVITA DRONE CONTROLLER\e[K\n");
-            printf("PC %s:%d   %s\e[K\n", pc_ip, PC_PORT,
-                   link_ok ? "BRIDGE LINK OK" : "\e[91mNO ANSWER FROM BRIDGE\e[m");
+            int video_ok = have_video && (now - last_video) < VIDEO_TIMEOUT_US;
+            HUD(1, "VITA DRONE CONTROLLER");
+            HUD(2, "PC %s:%d", pc_ip, PC_PORT);
+            HUD(3, "%s", link_ok ? "BRIDGE LINK OK" : "\e[91mNO ANSWER FROM BRIDGE\e[m");
             if (link_ok) {
-                printf("mode %s   failsafe: %s   emergency: %s\e[K\n", tel.mode ? "control" : "idle",
-                       stage_name(tel.stage), tel.emergency ? "\e[91mYES\e[m" : "no");
-                printf("video %u fps   last command %.1f s ago\e[K\n", (unsigned)tel.fps, tel.age_tenths / 10.0);
-                printf("trim  R %+d  P %+d  Y %+d\e[K\n", tel.trim_roll, tel.trim_pitch, tel.trim_yaw);
+                HUD(4, "mode %s  failsafe %s", tel.mode ? "control" : "idle", stage_name(tel.stage));
+                HUD(5, "emergency: %s", tel.emergency ? "\e[91mYES\e[m" : "no");
+                HUD(6, "drone video %u fps  cmd %.1fs ago", (unsigned)tel.fps, tel.age_tenths / 10.0);
+                HUD(7, "trim R %+d P %+d Y %+d", tel.trim_roll, tel.trim_pitch, tel.trim_yaw);
             } else {
-                printf("\e[K\n\e[K\n\e[K\n");
+                HUD(4, " ");
+                HUD(5, " ");
+                HUD(6, " ");
+                HUD(7, " ");
             }
-            printf("sticks  R %+4d  P %+4d  T %+4d  Y %+4d   range %u\e[K\n", roll, pitch, throttle, yaw,
-                   (unsigned)speed);
-            printf("packets sent: %lu\e[K\n\e[K\n", sent);
-            printf("TRIANGLE hold = takeoff    CROSS = land    CIRCLE = EMERGENCY STOP\e[K\n");
-            printf("SQUARE hold = calibrate (on the ground)    START = range 1/2/3\e[K\n");
-            printf("D-pad = pitch/roll trim    L / R = yaw trim    SELECT hold = reset trim\e[K\n");
-            printf("L + R + START + SELECT = quit\e[K\n");
+            HUD(9, "sticks R%+4d P%+4d T%+4d Y%+4d", roll, pitch, throttle, yaw);
+            HUD(10, "range %u   sent %lu", (unsigned)speed, sent);
+            if (video_ok)
+                HUD(11, "picture %ux%u  %u fps", video_w, video_h, video_fps);
+            else
+                HUD(11, "\e[91mNO PICTURE\e[m");
+            printf("\e[61;1HTRIANGLE hold = takeoff   CROSS = land   CIRCLE = EMERGENCY STOP\e[K");
+            printf("\e[62;1HSQUARE hold = calibrate (on the ground)   START = range 1/2/3\e[K");
+            printf("\e[63;1HD-pad = pitch/roll trim   L / R = yaw trim   SELECT hold = reset trim\e[K");
+            printf("\e[64;1HL + R + START + SELECT = quit\e[K");
         }
 
         sceKernelDelayThread(5000);

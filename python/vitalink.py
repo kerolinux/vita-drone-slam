@@ -20,7 +20,20 @@ PC -> Vita (telemetry, 12 bytes, ~5 per second, to UDP port 9001):
     10   seconds since the last command, in 0.1 s units (capped at 255)
     11   checksum = XOR of bytes 2..10
 
-The C code in vita/src/main.c must stay in sync with this file.
+PC -> Vita (video, one packet per group of image rows, also to UDP port 9001):
+    0-1   'D' 'F'         magic
+    2     version (1)
+    3     frame id (wraps at 256)
+    4-5   image width in pixels, little endian
+    6-7   image height in pixels, little endian
+    8-9   index of the first image row in this packet, little endian
+    10    number of rows in this packet
+    11    flags (bit 0 = last packet of the frame)
+    12..  rows * width * 2 bytes of RGB565 pixels, little endian, row after row
+The PC decodes the drone's JPEG, shrinks it (default 320x240), converts it to RGB565 and sends it in rows, so
+the Vita only has to copy pixels. A lost packet leaves a few old rows on screen instead of losing the frame.
+
+The C code in vita/src/protocol.h must stay in sync with this file.
 """
 import struct
 
@@ -28,6 +41,10 @@ CONTROL_MAGIC = b"VD"
 TELEMETRY_MAGIC = b"DV"
 VERSION = 1
 MESSAGE_LEN = 12
+VIDEO_MAGIC = b"DF"
+VIDEO_HEADER_LEN = 12
+VIDEO_MAX_PAYLOAD = 1400   # keeps every UDP packet under the usual 1500-byte Ethernet / Wi-Fi limit
+VIDEO_FLAG_LAST = 0x01
 DEFAULT_PORT = 9000        # the PC bridge listens here
 VITA_PORT = 9001           # the Vita listens here for telemetry
 
@@ -92,3 +109,24 @@ def parse_telemetry(data):
     _, mode, stage, emergency, fps, tr, tp, ty, age = struct.unpack("<BBBBBbbbB", data[2:11])
     return {"mode": mode, "stage": stage, "emergency": bool(emergency), "fps": fps,
             "trim": {"roll": tr, "pitch": tp, "yaw": ty}, "age_s": age / 10.0}
+
+
+def pack_video_chunk(frame_id, width, height, row_start, rows, last, pixels) -> bytes:
+    """pixels must be rows * width * 2 bytes (RGB565, little endian)."""
+    if len(pixels) != rows * width * 2:
+        raise ValueError("pixel data does not match rows * width * 2")
+    header = struct.pack("<2sBBHHHBB", VIDEO_MAGIC, VERSION, frame_id & 0xFF, width, height, row_start, rows,
+                         VIDEO_FLAG_LAST if last else 0)
+    return header + bytes(pixels)
+
+
+def parse_video_chunk(data):
+    """Returns a dict (with the pixel bytes under "pixels"), or None if the packet is invalid."""
+    if len(data) < VIDEO_HEADER_LEN or data[:2] != VIDEO_MAGIC or data[2] != VERSION:
+        return None
+    _, _, frame_id, width, height, row_start, rows, flags = struct.unpack("<2sBBHHHBB", data[:VIDEO_HEADER_LEN])
+    pixels = data[VIDEO_HEADER_LEN:]
+    if rows < 1 or width < 1 or height < 1 or row_start + rows > height or len(pixels) != rows * width * 2:
+        return None
+    return {"frame_id": frame_id, "width": width, "height": height, "row_start": row_start, "rows": rows,
+            "last": bool(flags & VIDEO_FLAG_LAST), "pixels": pixels}

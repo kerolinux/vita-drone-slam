@@ -38,6 +38,17 @@ EMERGENCY_FLAG_20 = 0x02      # from the app's code, NOT seen in the capture
 EMERGENCY_FLAG_8 = 0x04       # seen in the capture
 MAX_TRIM = 40                 # largest trim offset in byte units
 
+AXES = ("roll", "pitch", "throttle", "yaw")
+# Stick range per speed setting (largest offset from the centre byte). The official app's speed button only
+# limited the right stick (roll/pitch); its left stick (throttle/yaw) was not limited the same way, and a
+# range of 20 on throttle/yaw did nothing on my drone, so those two get larger ranges. These numbers are
+# my own conservative choices, not values from the protocol.
+SPEED_PRESETS = {
+    1: {"roll": 20, "pitch": 20, "throttle": 40, "yaw": 40},
+    2: {"roll": 40, "pitch": 40, "throttle": 60, "yaw": 60},
+    3: {"roll": 70, "pitch": 70, "throttle": 90, "yaw": 90},
+}
+
 Frame = namedtuple("Frame", "jpeg ts seq")            # ts = wall-clock arrival time (time.time())
 
 
@@ -92,20 +103,21 @@ class DroneLink:
     def __init__(self, ip=DEFAULT_IP, control_port=CONTROL_PORT, video_port=VIDEO_PORT, local_port=LOCAL_PORT,
                  fmt=20, max_offset=40, signs=None, video=True,
                  command_timeout=0.3, land_after=1.5, cut_after=5.0, log=print):
-        """fmt: 20 or 8 (packet format). max_offset: largest stick deflection from centre (1..127).
+        """fmt: 20 or 8 (packet format). max_offset: largest stick deflection from centre (1..127), one number
+        for all axes or a dict per axis, e.g. SPEED_PRESETS[1].
         signs: e.g. {"pitch": -1} to flip an axis (stick directions are not verified yet)."""
         if fmt not in (8, 20):
             raise ValueError("fmt must be 8 or 20")
-        if not 1 <= max_offset <= 127:
-            raise ValueError("max_offset must be 1..127")
         self.ip, self.control_port, self.video_port, self.local_port = ip, control_port, video_port, local_port
-        self.fmt, self.max_offset, self.video = fmt, max_offset, video
+        self.fmt, self.video = fmt, video
+        self._lock = threading.Lock()                      # must exist before max_offset is set
+        self._offsets = {axis: 40 for axis in AXES}
+        self.max_offset = max_offset
         self.command_timeout, self.land_after, self.cut_after = command_timeout, land_after, cut_after
         self.signs = {"roll": 1, "pitch": 1, "throttle": 1, "yaw": 1}
         self.signs.update(signs or {})
         self._log = log
 
-        self._lock = threading.Lock()
         self._sock = None
         self._threads = []
         self._running = False
@@ -123,6 +135,28 @@ class DroneLink:
         self._seq = 0
         self._counts = Counter()
         self._replies = Counter()
+
+    @property
+    def max_offset(self):
+        """Stick range of the roll axis (the other axes may differ; see axis_offsets)."""
+        return self._offsets["roll"]
+
+    @max_offset.setter
+    def max_offset(self, value):
+        """An int sets every axis; a dict (axis -> int) sets those axes."""
+        new = dict.fromkeys(AXES, value) if not isinstance(value, dict) else value
+        for axis, v in new.items():
+            if axis not in AXES:
+                raise ValueError(f"unknown axis {axis!r}")
+            if not isinstance(v, int) or not 1 <= v <= 127:
+                raise ValueError("max_offset must be an integer 1..127")
+        with self._lock:
+            self._offsets.update(new)
+
+    @property
+    def axis_offsets(self):
+        with self._lock:
+            return dict(self._offsets)
 
     # ------------------------------------------------------------ lifecycle
     def start(self, idle_seconds=2.0):
@@ -253,7 +287,7 @@ class DroneLink:
             pass
 
     def _stick_byte(self, name, value):
-        offset = int(round(max(-1.0, min(1.0, value)) * self.max_offset)) + self._trim.get(name, 0)
+        offset = int(round(max(-1.0, min(1.0, value)) * self._offsets[name])) + self._trim.get(name, 0)
         return fix(max(0, min(255, CENTRE + self.signs[name] * offset)))
 
     def _next_packets(self, now):

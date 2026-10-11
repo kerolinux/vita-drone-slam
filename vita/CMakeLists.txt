@@ -33,9 +33,9 @@ endif()
 
 include_directories(src ${DEBUGSCREEN_DIR})
 
+# debugScreen.c is not listed: main.c includes it (DEBUG_SCREEN_CODE_INCLUDE) to reach the framebuffer.
 add_executable(${PROJECT_NAME}
   src/main.c
-  ${DEBUGSCREEN_DIR}/debugScreen.c
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -46,7 +46,12 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME})
+# The FILE lines add the bubble icon and the LiveArea pictures (made by tools/make_assets.py) to the VPK.
 vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
   VERSION ${VITA_VERSION}
   NAME ${VITA_APP_NAME}
+  FILE sce_sys/icon0.png sce_sys/icon0.png
+  FILE sce_sys/livearea/contents/bg.png sce_sys/livearea/contents/bg.png
+  FILE sce_sys/livearea/contents/startup.png sce_sys/livearea/contents/startup.png
+  FILE sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
 )

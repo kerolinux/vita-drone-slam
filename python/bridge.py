@@ -13,8 +13,9 @@ import socket
 import time
 
 import vitalink as vl
+from drone import SPEED_PRESETS
 
-SPEED_OFFSETS = {1: 20, 2: 40, 3: 70}      # same stick ranges as the keyboard teleop (1 / 2 / 3)
+SPEED_OFFSETS = SPEED_PRESETS               # per-axis stick ranges for the Vita's speed setting 1 / 2 / 3
 B = vl.BUTTONS
 TRIM_BUTTONS = {B["TRIM_PITCH_UP"]: ("pitch", +1), B["TRIM_PITCH_DOWN"]: ("pitch", -1),
                 B["TRIM_ROLL_LEFT"]: ("roll", -1), B["TRIM_ROLL_RIGHT"]: ("roll", +1),
@@ -45,6 +46,11 @@ class VitaBridge:
         self._fps_frames = 0
         self._fps = 0
         self.packets_ok = self.packets_bad = self.packets_stale = 0
+
+    @property
+    def vita_ip(self):
+        """Address of the Vita once it has sent a valid packet, else None."""
+        return self._vita_ip
 
     # ------------------------------------------------------------ incoming
     def handle_packet(self, data, addr, now=None):
@@ -159,7 +165,16 @@ def main():
     ap.add_argument("--trim-file", default=TRIM_FILE)
     ap.add_argument("--land-after", type=float, default=1.5)
     ap.add_argument("--cut-after", type=float, default=5.0)
+    ap.add_argument("--no-vita-video", action="store_true", help="do not send the camera picture to the Vita")
+    ap.add_argument("--vita-size", default="320x240", help="picture size sent to the Vita, WIDTHxHEIGHT (max 640x480)")
+    ap.add_argument("--vita-fps", type=float, default=8.0, help="most frames per second sent to the Vita")
     args = ap.parse_args()
+    try:
+        width, height = (int(v) for v in args.vita_size.lower().split("x"))
+        if not (16 <= width <= 640 and 16 <= height <= 480):
+            raise ValueError
+    except ValueError:
+        ap.error("--vita-size must look like 320x240 (width 16-640, height 16-480)")
 
     ans = input("Are the PROPS REMOVED (or the drone tethered / in a cage)? Type YES: ")
     if ans.strip() != "YES":
@@ -172,12 +187,21 @@ def main():
     bridge = VitaBridge(link, port=args.port, on_trim_change=lambda t: save_trim(t, args.trim_file))
     print(f"Bridge listening on UDP {args.port}. Start the Vita app and point it at this PC's address.")
     link.start()
+    forwarder = None
+    if not args.no_vita_video and not args.no_video:
+        from videoforward import VideoForwarder
+        forwarder = VideoForwarder(link, lambda: (bridge.vita_ip, vl.VITA_PORT) if bridge.vita_ip else None,
+                                   size=(width, height), fps=args.vita_fps)
+        forwarder.start()
+        print(f"Sending the camera picture to the Vita at {width}x{height}, up to {args.vita_fps:g} fps.")
     try:
         bridge.run()
     except KeyboardInterrupt:
         pass
     finally:
         print("Stopping motors and closing...")
+        if forwarder:
+            forwarder.stop()
         save_trim(link.get_trim(), args.trim_file)
         bridge.close()
         link.close()

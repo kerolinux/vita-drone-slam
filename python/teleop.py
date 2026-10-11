@@ -5,7 +5,7 @@ Keys (click the video window first; keys only work while it is focused):
   a / d   roll   (left / right)          q / e   yaw (left / right)
   t       takeoff pulse                  g       land pulse
   SPACE   EMERGENCY STOP (motors cut)    ESC     emergency stop and quit
-  1 2 3   stick range small / medium / large
+  1 2 3   stick range small / medium / large (throttle and yaw get larger ranges than roll and pitch)
   i / k   pitch trim + / -   j / l   roll trim - / +   u / o   yaw trim - / +   0   reset trim
   x       calibrate (the app's "checkout" flag; drone on a LEVEL SURFACE, not flying; untested)
   v       start/stop recording frames to recordings/<timestamp>/ (for SLAM)
@@ -31,7 +31,7 @@ AXES = {  # key -> (axis, direction)
 TRIM_KEYS = {"i": ("pitch", +1), "k": ("pitch", -1),
              "j": ("roll", -1), "l": ("roll", +1),
              "u": ("yaw", -1), "o": ("yaw", +1)}
-SPEEDS = {"1": 20, "2": 40, "3": 70}     # max stick offset from centre (byte units)
+SPEED_KEYS = ("1", "2", "3")             # stick range presets, see drone.SPEED_PRESETS
 TRIM_FILE = "trim.json"
 
 
@@ -81,7 +81,7 @@ class KeyHold:
 def main():
     import cv2
     import numpy as np
-    from drone import DroneLink
+    from drone import DroneLink, SPEED_PRESETS
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--ip", default="192.168.4.153")
@@ -130,8 +130,8 @@ def main():
                     link.takeoff()
                 elif ch == "g":
                     link.land()
-                elif ch in SPEEDS:
-                    link.max_offset = SPEEDS[ch]
+                elif ch in SPEED_KEYS:
+                    link.max_offset = SPEED_PRESETS[int(ch)]
                 elif ch in TRIM_KEYS:
                     axis, direction = TRIM_KEYS[ch]
                     link.adjust_trim(axis, direction * args.trim_step)

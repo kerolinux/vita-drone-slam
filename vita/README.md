@@ -1,6 +1,6 @@
 # Vita Drone Controller
 
-A PS Vita homebrew app that sends the Vita's sticks and buttons to `bridge.py` on your PC over Wi-Fi, and shows the bridge's telemetry on the Vita screen.
+A PS Vita homebrew app that sends the Vita's sticks and buttons to `bridge.py` on your PC over Wi-Fi, shows the bridge's telemetry, and shows the drone's camera picture on the Vita screen.
 
 ```
 Vita --Wi-Fi--> home router --Ethernet--> PC (bridge.py) --Wi-Fi dongle--> drone
@@ -8,7 +8,7 @@ Vita --Wi-Fi--> home router --Ethernet--> PC (bridge.py) --Wi-Fi dongle--> drone
 
 The PC keeps its Ethernet connection to the router and uses the Wi-Fi dongle for the drone, so no second Wi-Fi radio is needed.
 
-> **Status:** the PC side (`bridge.py`, `vitalink.py`) and the message code in `src/protocol.h` are tested. `src/main.c` has been checked against the real Vita headers but **has not been built or run on a Vita yet**. Expect to fix small things on the first build.
+> **Status:** the controls and telemetry run on a real Vita. The camera picture (version 2) and the app icon are new: the PC side and the message and drawing code in `src/protocol.h` are tested on a PC, and `src/main.c` compiles cleanly against the real Vita headers, but the picture and icon have **not been run on a Vita yet**.
 
 ## Controls
 
@@ -25,6 +25,21 @@ The PC keeps its Ethernet connection to the router and uses the Wi-Fi dongle for
 | SELECT (hold 0.8 s) | reset trim |
 | START | stick range 1 / 2 / 3 (starts at 1, the smallest) |
 | L + R + START + SELECT | quit |
+
+## Camera picture
+
+The PC decodes the drone's JPEG video, shrinks it (default 320x240), converts it to 16-bit colour and sends it to the Vita in small UDP packets (a few rows each). The Vita draws it, doubled to 640x480, at the top left of its screen; the text is in the column to the right and under the picture. A lost packet only leaves a few old rows on screen.
+
+Bandwidth is about 10 Mbit/s at the defaults (320x240, 8 frames per second). If the picture stutters, lower it:
+
+```
+python python\bridge.py --vita-size 240x180 --vita-fps 6
+python python\bridge.py --no-vita-video          # controls only
+```
+
+## Icon
+
+`sce_sys/icon0.png` is the bubble icon and `sce_sys/livearea/contents/` has the LiveArea pictures. They are drawn by `tools/make_assets.py` (needs `pip install pillow`; run it from the `vita` folder) and added to the VPK by `CMakeLists.txt`. Edit the colours in the script and re-run it to restyle them. If the icon doesn't change after installing, delete the old "Vita Drone" bubble first and install again (the Vita can cache the old icon), and rebuild the database if needed.
 
 ## 1. Build the app
 
@@ -66,4 +81,4 @@ The Vita must be on the **same router** as the PC (not a guest network; some rou
 
 ## Message format
 
-See `vitalink.py` (Python) and `src/protocol.h` (C). Both are 12-byte UDP messages with a magic number, a version, a checksum and, for control messages, a sequence number. Control goes from the Vita to UDP port 9000; telemetry goes back to the Vita on UDP port 9001.
+See `vitalink.py` (Python) and `src/protocol.h` (C). Control and telemetry are 12-byte UDP messages with a magic number, a version, a checksum and (control only) a sequence number. Control goes from the Vita to UDP port 9000; telemetry and the camera picture go back to the Vita on UDP port 9001.

@@ -219,6 +219,19 @@ class DroneTests(unittest.TestCase):
         link.close(stop_motors=False)
         self.assertEqual(sum(1 for p in self.pkts(8) if p[5] == 0x80), 21)
 
+    def test_per_axis_ranges(self):
+        link = self.link(max_offset={"roll": 10, "pitch": 20, "throttle": 30, "yaw": 40})
+        self.assertEqual(link.axis_offsets, {"roll": 10, "pitch": 20, "throttle": 30, "yaw": 40})
+        self.assertEqual([link._stick_byte(a, 1.0) for a in drone.AXES], [138, 148, 158, 168])
+        link.max_offset = drone.SPEED_PRESETS[1]
+        self.assertEqual(link.axis_offsets, drone.SPEED_PRESETS[1])
+        link.max_offset = 50                                  # a single number sets every axis
+        self.assertEqual(set(link.axis_offsets.values()), {50})
+        with self.assertRaises(ValueError):
+            link.max_offset = {"roll": 0}
+        with self.assertRaises(ValueError):
+            link.max_offset = {"nope": 10}
+
     def test_status_and_validation(self):
         with self.assertRaises(ValueError):
             DroneLink(fmt=7)

@@ -2,19 +2,11 @@
 
 Run:  python test_bridge.py
 """
-import os
 import socket
-import sys
 import threading
 import time
 import unittest
 
-# Ensure local modules resolve regardless of the editor's working directory.
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-if CURRENT_DIR not in sys.path:
-    sys.path.insert(0, CURRENT_DIR)
-
-# pyright: reportMissingImports=false
 import vitalink as vl
 from bridge import VitaBridge
 from drone import DroneLink
@@ -93,10 +85,10 @@ class BridgeTests(unittest.TestCase):
         return [p for p in list(self.fake.control_packets) if len(p) == length and p[0] == 0x66]
 
     def test_sticks_and_speed_reach_the_drone(self):
-        for speed, offset in ((1, 20), (2, 40), (3, 70)):
-            self.stream(0.4, speed=speed, roll=127, pitch=-127)
-            want = (128 + offset, 128 - offset)
-            self.assertTrue(any((p[2], p[3]) == want for p in self.pkts()), f"speed {speed}")
+        for speed, (rp, ty) in ((1, (20, 40)), (2, (40, 60)), (3, (70, 90))):
+            self.stream(0.4, speed=speed, roll=127, pitch=-127, throttle=127, yaw=-127)
+            want = (128 + rp, 128 - rp, 128 + ty, 128 - ty)
+            self.assertTrue(any(tuple(p[2:6]) == want for p in self.pkts()), f"speed {speed}")
 
     def test_takeoff_acts_once_per_press(self):
         self.stream(0.3)                                  # session starts with nothing pressed
