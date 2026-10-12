@@ -65,7 +65,7 @@ eval/          trajectory evaluation scripts and results
 - [ ] Live SLAM while flying with the Vita
 - [ ] Evaluate against a known floor path
 - [ ] Bottom camera: AprilTag detection / landing
-- [ ] Demo video of the Vita flying the drone
+- [x] Demo video of the Vita flying the drone
 - [ ] Stretch: ROS 2 wrapper (/cmd_vel, /image_raw)
 - [ ] Stretch: IMU logger and monocular-inertial SLAM
 
