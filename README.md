@@ -50,18 +50,23 @@ eval/          trajectory evaluation scripts and results
 ## Roadmap
 
 - [ ] Weigh drone and note specs
-- [ ] Capture app traffic with PCAPdroid
-- [ ] Document control packet format
-- [ ] Document video stream format
-- [✓] Control the drone from Python (keyboard)
-- [✓] Add failsafes (deadman timeout, throttle limit)
-- [✓] Display live video in OpenCV
+- [x] Capture app traffic (Wireshark + BlueStacks)
+- [x] Document control packet format
+- [x] Document video stream format
+- [x] Control the drone from Python (keyboard)
+- [x] Add failsafes (deadman timeout, throttle limit)
+- [x] Display live video in OpenCV
+- [x] Vita controller app (sticks, buttons, trim, telemetry)
+- [x] Camera picture on the Vita
+- [x] SLAM tools: calibration, flight recording, ORB-SLAM3 sequence converter
+- [ ] Test the bridge failsafe on the real drone (props off)
 - [ ] Calibrate camera (checkerboard)
 - [ ] Run ORB-SLAM3 offline on recorded flights
-- [✓] Vita controller app
 - [ ] Live SLAM while flying with the Vita
 - [ ] Evaluate against a known floor path
 - [ ] Bottom camera: AprilTag detection / landing
+- [ ] Demo video of the Vita flying the drone
+- [ ] Stretch: ROS 2 wrapper (/cmd_vel, /image_raw)
 - [ ] Stretch: IMU logger and monocular-inertial SLAM
 
 ## Protocol notes
