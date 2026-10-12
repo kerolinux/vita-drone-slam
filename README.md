@@ -91,7 +91,7 @@ TBD
 ## Acknowledgements
 
 https://github.com/skylot/jadx
-Claude
+
 
 ## License
 
