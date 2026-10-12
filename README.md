@@ -2,6 +2,10 @@
 
 Reverse-engineering a cheap Wi-Fi camera drone (E4 Drone, app: WIFI_CAM), flying it from a PS Vita, and running monocular visual SLAM on its video stream.
 
+
+https://github.com/user-attachments/assets/efbb8a70-ea3d-4095-aed1-51404e11730f
+
+
 > **Status:** early stage. See the roadmap below for what works so far.
 
 <!-- Add a demo GIF or video link here once you have one -->
@@ -71,11 +75,11 @@ eval/          trajectory evaluation scripts and results
 
 ## Protocol notes
 
-_Fill in as you decode it: destination IP and port, control packet length and byte layout, how video starts, packet format, camera switching._
+TBD
 
 ## Results
 
-_Add calibration error, trajectory error vs ground truth, tracking-loss rate, and what failed._
+TBD
 
 ## Safety
 
@@ -86,7 +90,8 @@ _Add calibration error, trajectory error vs ground truth, tracking-loss rate, an
 
 ## Acknowledgements
 
-_Link any projects or write-ups you used as reference._
+https://github.com/skylot/jadx
+
 
 ## License
 
