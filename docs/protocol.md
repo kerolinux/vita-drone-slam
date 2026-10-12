@@ -1,6 +1,6 @@
 # Drone protocol notes: E4 Drone (WIFI_CAM app)
 
-Last updated: 10 Oct 2026 (after the first flight). Everything here concerns my own drone. Each item is marked with how well it is confirmed (see [Verification status](#verification-status)).
+Last updated: 12 Oct 2026 (after flying with the PS Vita). Everything here concerns my own drone. Each item is marked with how well it is confirmed (see [Verification status](#verification-status)).
 
 ## Summary
 
@@ -12,6 +12,7 @@ Last updated: 10 Oct 2026 (after the first flight). Everything here concerns my 
 | Transport | UDP only (the app also contains a TCP variant for drones at `192.168.4.151`; not mine) |
 | Video | MJPEG, 640x480, UDP |
 | Control | Short UDP packets with a header, a checksum and a trailer |
+| My controller | PS Vita app talking to a PC bridge that drives the drone (see [Vita link](#vita-link)) |
 
 ## How this was worked out
 
@@ -111,7 +112,19 @@ Neutral packet: `66 80 80 80 80 00 00 99`.
 ### Timing
 
 - One-key flags are held for about 1 s: 51 packets at 20 ms (20-byte format) or about 21 packets at 40 ms (8-byte format). The captured pulses lasted about 1.04 s.
-- Stick range depends on the app's speed setting. The code suggests maximum deflections of 40, 60 and 128 (default 40), probably offsets from the centre. Not confirmed.
+### Stick ranges
+
+The official app's speed button changes only the maximum deflection of its right stick (roll and pitch): the code suggests 40, 60 and 128 (default 40), probably offsets from the centre byte. It does not limit its left stick (throttle and yaw) the same way; in the capture the throttle byte went far above centre.
+
+My first Vita build used the same small range on all four axes (20 at range 1). The right stick (roll, pitch) worked, but **throttle and yaw did nothing at 20**. Giving throttle and yaw larger ranges fixed it. The ranges my software uses are my own choices, not protocol values (largest offset from the centre byte `0x80`):
+
+| Speed setting | Roll / pitch | Throttle / yaw |
+|---|---|---|
+| 1 | 20 | 40 |
+| 2 | 40 | 60 |
+| 3 | 70 | 90 |
+
+Setting 2 felt "just right" in flight. Trim offsets (see below) are added on top and are limited to +-40.
 
 ## Verification status
 
@@ -124,11 +137,13 @@ Neutral packet: `66 80 80 80 80 00 00 99`.
 | Land flag (20-byte, same bit as fly) | Confirmed: the drone lands. Same bit as fly; whether it acts as a toggle has not been tested |
 | Emergency stop | Confirmed: the teleop's emergency stop cuts the motors. It sends both formats' emergency packets, so which flag does the work is unknown. The 20-byte flag (bit 1 of byte 6) comes from app code only |
 | 8-byte layout, flags 1 / 2 / 4 | Seen in the capture; not tested on the drone |
-| Stick directions (roll right, pitch forward, throttle up, yaw clockwise) | Controls feel right in flight, so the assumptions look correct; not yet recorded axis by axis |
-| Stick range limits | Inferred from the app code |
+| Stick directions (roll right, pitch forward, throttle up, yaw clockwise) | All four axes behave as expected in flight on the keyboard teleop and the Vita (roll and pitch from the start, throttle and yaw once their range was raised); not recorded axis by axis |
+| Stick ranges | Throttle and yaw need more than +-20 to react; the presets in the table above work (setting 2 "just right"). The values are my own, not from the protocol |
 | Why the app switches between the two formats | Unknown (it happened around the video stop/start and again later) |
-| Trim (three offsets added to the roll, pitch and yaw bytes; the app has three trim sliders) | Implemented in `drone.py` (`set_trim`) and the teleop keys; effect on the drift not yet tested |
+| Trim (three offsets added to the roll, pitch and yaw bytes; the app has three trim sliders) | Implemented in `drone.py` (`set_trim`), the teleop keys and the Vita D-pad / L / R buttons, saved in `trim.json`; the effect on the drift is not recorded yet |
 | Calibrate flag (the app's "checkout": bit 2 of byte 6 in the 20-byte format, bit 7 of byte 5 in the 8-byte format) | From app code only; probably a gyro calibration or trim reset; untested |
+| Vita link (control, telemetry, camera picture) | Control and telemetry confirmed in flight; the camera picture appears on the Vita but at a low frame rate (not yet measured) |
+| Bridge failsafe (no Vita packets: neutral at 0.3 s, land at 1.5 s, motor cut at 5 s) | Implemented and unit-tested; **not yet tested on the real drone** (props-off test: quit the Vita app while the motors spin) |
 | Camera switch (front / bottom) | Not decoded; handled inside the app's native library |
 | Meaning of the 8-byte replies `55 00 02 ...` | Unknown (burst after video start only) |
 
@@ -137,23 +152,41 @@ Neutral packet: `66 80 80 80 80 00 00 99`.
 - **10 Oct 2026, first flight with propellers fitted (safe space, keyboard teleop):** takeoff, landing, climbing and descending, and the emergency stop all work, and the controls feel right.
 - **Drift:** the drone does not stay in place. It drifts around horizontally while hovering, so it has no position hold. Attitude is stabilised by the drone itself, but nothing holds its position, and no trim was being sent (all roll/pitch/yaw bytes were exactly centred).
 - **Delay:** a slight delay was felt. Not measured. Likely contributors: video latency (JPEG over Wi-Fi) and the teleop's key-hold window (`--hold`, default 0.35 s). The control packets themselves are sent every 20 ms.
+- **11-12 Oct 2026, flying with the Vita (controlled environment):** the right stick (roll, pitch) moved the drone; takeoff, land and emergency stop worked. The left stick (throttle, yaw) did nothing at the starting range of 20. After throttle and yaw got their own larger ranges, speed setting 2 was "just right". The camera picture shows on the Vita at a lower frame rate than the drone's own 8-10 fps.
 - **Next:** gyro calibration on a level surface, then trim until it hovers still, then try a vision-based position hold.
+
+## Vita link
+
+The PS Vita app (`vita/`) talks to `bridge.py` on the PC, which drives the drone through `drone.py`. The Vita joins the home router and the PC is on the same router by Ethernet, while the PC's Wi-Fi dongle is joined to the drone. The exact byte layouts are in `vitalink.py` (Python) and `vita/src/protocol.h` (C), checked against each other by `test_vita_protocol.py`.
+
+| Message | Direction | UDP port | Size | Rate |
+|---|---|---|---|---|
+| Control: sticks (signed bytes), buttons, speed setting, sequence number, checksum | Vita to PC | 9000 | 12 bytes | about 50 per second |
+| Telemetry: mode, failsafe stage, emergency flag, video fps, trim, time since last command | PC to Vita | 9001 | 12 bytes | about 5 per second |
+| Camera picture: rows of RGB565 pixels (the PC decodes the drone's JPEG and shrinks it, default 320x240 at up to 8 fps) | PC to Vita | 9001 | up to 1412 bytes | about 120 packets per frame |
+
+- Buttons act on their rising edge only, and buttons already held when a session starts are ignored (except the emergency stop). Takeoff needs a 0.6 s hold and calibrate a 1 s hold on the Vita.
+- The picture needs roughly 10 Mbit/s at the defaults; `--vita-size` and `--vita-fps` lower it.
+- For SLAM the PC keeps the full-quality video: `bridge.py --record` saves every frame as `<seconds>.jpg`. See `docs/slam_walkthrough.md`.
 
 ## Safety findings
 
 - **The drone does not stop by itself when packets stop.** After a test script ended without an explicit stop, I had to press the drone's power button. Control software must send a stop itself.
 - `drone.py` runs a staged failsafe: no `set_sticks()`/`heartbeat()` call for 0.3 s gives neutral sticks, 1.5 s sends a land pulse, 5 s sends the emergency stop. `close()` always sends the emergency stop.
-- Props stay off until the stop is confirmed to work every time, and the first flights are tethered or caged at low throttle. Check CAA rules before flying outdoors.
+- The Vita bridge feeds the same failsafe: the Vita's control packets are the heartbeat, so a dead Vita, Wi-Fi drop or crashed app ends in neutral, land, then motor cut. This still needs a props-off test on the real drone.
+- Props stay off for new tests until the stop is confirmed to work every time, and new flight tests happen in a controlled space at low range. Check CAA rules before flying outdoors.
 
 ## Open questions
 
 1. Which command actually stops the motors on a 20-byte drone (land vs emergency)?
-2. Real stick directions and usable ranges (tethered, low throttle).
+2. The best stick ranges per axis (current presets are my own choices) and whether yaw needs the same range as throttle.
 3. How the camera switch works, and whether both cameras can stream at once.
 4. What the drone's 8-byte replies encode (battery? state?). Next step: extract the drone-to-PC packets from the capture around the takeoff taps.
 5. Why the app changes packet format, and whether the drone needs it.
 6. Does the calibrate flag fix the drift? How much trim does the drone need, and does it change with battery level?
 7. How large is the real delay (video versus control)? Test idea: film a running stopwatch with the drone's camera and compare it with the stopwatch itself on screen.
+8. Why the picture on the Vita runs below the drone's frame rate: the drone's own rate and losses, the bridge's frame cap, or the Wi-Fi? (Compare the two numbers on the Vita screen: `drone video` and `picture`.)
+9. Whether the drone accepts a second Wi-Fi client, which would allow a standalone mode with the Vita flying the drone directly (the failsafe above would then have to live on the Vita).
 
 ## Reproducing the capture
 

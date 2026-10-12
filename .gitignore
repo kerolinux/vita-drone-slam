@@ -6,3 +6,7 @@ first_frame.jpg
 __pycache__/
 vita/build/
 trim.json
+sequences/
+calib/
+.venv/
+.vscode/

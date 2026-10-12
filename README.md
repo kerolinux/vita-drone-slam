@@ -58,7 +58,7 @@ eval/          trajectory evaluation scripts and results
 - [✓] Display live video in OpenCV
 - [ ] Calibrate camera (checkerboard)
 - [ ] Run ORB-SLAM3 offline on recorded flights
-- [ ] Vita controller app
+- [✓] Vita controller app
 - [ ] Live SLAM while flying with the Vita
 - [ ] Evaluate against a known floor path
 - [ ] Bottom camera: AprilTag detection / landing

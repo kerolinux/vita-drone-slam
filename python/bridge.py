@@ -9,6 +9,7 @@ Buttons act on their rising edge only, and buttons already held when a session s
 except EMERGENCY, which always acts (and repeats once per second while held).
 """
 import argparse
+import os
 import socket
 import time
 
@@ -168,7 +169,12 @@ def main():
     ap.add_argument("--no-vita-video", action="store_true", help="do not send the camera picture to the Vita")
     ap.add_argument("--vita-size", default="320x240", help="picture size sent to the Vita, WIDTHxHEIGHT (max 640x480)")
     ap.add_argument("--vita-fps", type=float, default=8.0, help="most frames per second sent to the Vita")
+    ap.add_argument("--record", action="store_true",
+                    help="save every camera frame to recordings/<timestamp>/ (for SLAM)")
+    ap.add_argument("--record-dir", default=None, help="folder for --record (default recordings/<timestamp>)")
     args = ap.parse_args()
+    if args.record and args.no_video:
+        ap.error("--record needs the video; remove --no-video")
     try:
         width, height = (int(v) for v in args.vita_size.lower().split("x"))
         if not (16 <= width <= 640 and 16 <= height <= 480):
@@ -194,12 +200,19 @@ def main():
                                    size=(width, height), fps=args.vita_fps)
         forwarder.start()
         print(f"Sending the camera picture to the Vita at {width}x{height}, up to {args.vita_fps:g} fps.")
+    recorder = None
+    if args.record:
+        from recorder import FrameRecorder
+        recorder = FrameRecorder(link, args.record_dir or os.path.join("recordings", time.strftime("%Y%m%d_%H%M%S")))
+        recorder.start()
     try:
         bridge.run()
     except KeyboardInterrupt:
         pass
     finally:
         print("Stopping motors and closing...")
+        if recorder:
+            recorder.stop()
         if forwarder:
             forwarder.stop()
         save_trim(link.get_trim(), args.trim_file)
