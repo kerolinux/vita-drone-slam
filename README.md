@@ -2,6 +2,10 @@
 
 Reverse-engineering a cheap Wi-Fi camera drone (E4 Drone, app: WIFI_CAM), flying it from a PS Vita, and running monocular visual SLAM on its video stream.
 
+
+https://github.com/user-attachments/assets/efbb8a70-ea3d-4095-aed1-51404e11730f
+
+
 > **Status:** early stage. See the roadmap below for what works so far.
 
 <!-- Add a demo GIF or video link here once you have one -->
