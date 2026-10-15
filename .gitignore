@@ -1,12 +1,40 @@
+# Drone recordings and captured data
 recordings/
-calib/
-packets.txt
-first_frame.jpg
-.venv/
-__pycache__/
-vita/build/
-trim.jsongit grep -n -I -i -E 'kiroles|C:\\Users|192\.168\.|password|passwd|secret|token|api[_-]?key|ssid'
 sequences/
 calib/
+vita/build/
+build/
+trajectories/
+captures/
+packets.txt
+*.bag
+
+# Captured images and local test outputs
+first_frame.jpg
+first_frame.png
+flight1_contact_sheet.jpg
+undistort_preview.jpg
+
+# Python
 .venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# IDE and editor settings
 .vscode/
+
+# Build artifacts
+cmake-build-*/
+*.o
+*.so
+*.a
+
+# Logs and temporary files
+*.log
+*.bak
+
+# Local environment files
+.env
+.env.*
+!.env.example

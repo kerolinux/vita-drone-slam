@@ -1,0 +1,50 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# Camera parameters (made by calibrate.py; reprojection error 0.331 px)
+#--------------------------------------------------------------------------------------------
+File.version: "1.0"
+
+Camera.type: "PinHole"
+
+Camera1.fx: 931.432295
+Camera1.fy: 929.633035
+Camera1.cx: 311.308958
+Camera1.cy: 236.214237
+
+Camera1.k1: 0.147505
+Camera1.k2: -0.613989
+Camera1.p1: 0.008993
+Camera1.p2: -0.009062
+Camera1.k3: 0.395905
+
+Camera.fps: 8
+
+# Color order of the images (0: BGR, 1: RGB). OpenCV reads BGR.
+Camera.RGB: 0
+
+Camera.width: 640
+Camera.height: 480
+
+#--------------------------------------------------------------------------------------------
+# ORB parameters
+#--------------------------------------------------------------------------------------------
+ORBextractor.nFeatures: 1000
+ORBextractor.scaleFactor: 1.2
+ORBextractor.nLevels: 8
+ORBextractor.iniThFAST: 20
+ORBextractor.minThFAST: 7
+
+#--------------------------------------------------------------------------------------------
+# Viewer parameters
+#--------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1.0
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2.0
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3.0
+Viewer.ViewpointX: 0.0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500.0

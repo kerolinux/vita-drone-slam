@@ -1,131 +1,226 @@
 # vita-drone-slam
 
-Reverse-engineering a cheap Wi-Fi camera drone (E4 Drone, app: WIFI_CAM), flying it from a PS Vita, and running monocular visual SLAM on its video stream.
+Reverse-engineering a low-cost E4 Wi-Fi camera drone (official app: `WIFI_CAM`), controlling it from a PlayStation Vita, and experimenting with monocular visual SLAM using ORB-SLAM3.
 
-> **Status:** the drone's control and video protocol is decoded, and it flies from a Python keyboard teleop and from a PS Vita app that also shows the camera picture. Camera calibration and SLAM are next (the tools are written and tested on synthetic data, not yet on real flights).
+The project combines drone protocol analysis, Python control, PS Vita homebrew, live camera streaming, and robotics perception. The longer-term goal is to build toward vision-assisted landing on a rotating platform.
 
-https://github.com/user-attachments/assets/efbb8a70-ea3d-4095-aed1-51404e11730f
+[Watch the project demo](https://github.com/user-attachments/assets/efbb8a70-ea3d-4095-aed1-51404e11730f)
 
-## What it does
+## Project status
 
-- **Protocol:** control and video packets worked out from my own captures of the official app, plus the open-source *opendrone* viewer for the video handshake. Written up in [`docs/protocol.md`](docs/protocol.md).
-- **Control library** (`python/drone.py`): sends the control packets at 50 Hz, receives the video, and runs a staged failsafe (neutral sticks, then land, then motor cut) because the drone does **not** stop by itself when packets stop.
-- **Keyboard teleop** (`python/teleop.py`): live video, trim, recording.
-- **PS Vita controller** (`vita/`, `python/bridge.py`): a homebrew app with the Vita's sticks and buttons, telemetry, and the drone's camera picture on the Vita screen.
-- **SLAM tools** (`python/calibrate.py`, `capture_calib.py`, `recorder.py`, `make_tum_sequence.py`): camera calibration, flight recording and an ORB-SLAM3 input converter. Walkthrough in [`docs/slam_walkthrough.md`](docs/slam_walkthrough.md).
+- **Drone control:** decoded control packets and working Python keyboard and PS Vita control.
+- **Live video:** drone camera stream displayed on the PC and PS Vita.
+- **ORB-SLAM3:** live camera frames forwarded from Windows to an ORB-SLAM3 worker in WSL2. SLAM initialization and visualisation have been demonstrated under suitable lighting.
+- **Camera calibration:** calibration parameters are configured; their accuracy still needs independent validation.
+- **Autonomous landing:** planned. Downward-camera switching, AprilTag-based relative pose estimation, and rotating-platform landing have not yet been implemented.
+
+## Features
+
+- **Protocol reverse engineering:** control and video packet formats investigated using captures from the official app and the open-source `opendrone` viewer. See [`docs/protocol.md`](docs/protocol.md).
+- **Python control library:** `python/drone.py` sends control packets at approximately 50 Hz and implements a staged failsafe.
+- **Keyboard teleoperation:** `python/teleop.py` provides keyboard control and live video.
+- **PS Vita controller:** `vita/` and `python/bridge.py` connect a Vita homebrew controller to the drone, with sticks, buttons, trim, telemetry, and camera video.
+- **Camera and SLAM tools:** calibration, recording, dataset conversion, and live frame forwarding to ORB-SLAM3.
+- **Live monocular SLAM:** C++ worker based on ORB-SLAM3, with trajectory output and an optional Pangolin visualiser.
 
 ## System overview
 
-```
-PS Vita --Wi-Fi--> router --Ethernet--> PC (bridge.py) --USB Wi-Fi dongle--> drone
-                                          |
-                                          +-- video: back to the Vita screen, saved flights for calibration and SLAM
+```text
+                 Wi-Fi
+PS Vita <----------------------> Router
+                                    |
+                                  Ethernet
+                                    |
+                                    v
+                               Windows PC
+                                    |
+                          USB Wi-Fi adapter
+                                    |
+                                    v
+                              E4 Wi-Fi drone
+                                    |
+                               Camera video
+                                    |
+                                    v
+                          Python bridge (Windows)
+                                    |
+                             TCP frame stream
+                                    |
+                                    v
+                               WSL2 Ubuntu
+                                    |
+                                    v
+                               ORB-SLAM3
+                                    |
+                           Pose / trajectory output
 ```
 
-The drone's Wi-Fi is joined by the PC's USB dongle, while the PC stays on the router by Ethernet. The Vita joins the same router, so no second Wi-Fi radio is needed.
+The PC connects to the drone through a USB Wi-Fi adapter while remaining connected to the local network over Ethernet. The Vita joins the same local network. The bridge forwards camera frames to the SLAM worker running inside WSL2.
 
 ## Hardware
 
-| Item | Notes |
+| Component | Details |
 |---|---|
-| E4 Drone (app: WIFI_CAM) | Front and bottom camera, 3.7 V 800 mAh (2.96 Wh) battery. Weight: _TBD_ |
-| PS Vita | Running homebrew (HENkaku), app built with VitaSDK |
-| PC | Ethernet to the router, USB Wi-Fi dongle for the drone |
-| Printed checkerboard and AprilTag | For camera calibration and tag experiments |
+| Drone | E4 Wi-Fi camera drone, official app `WIFI_CAM` |
+| Cameras | Front-facing and downward-facing cameras; switching protocol not yet decoded |
+| Battery | Labelled 3.7 V, 800 mAh (2.96 Wh) |
+| Controller | PS Vita running homebrew |
+| PC | Windows 11 with WSL2 Ubuntu |
+| Wireless connection | USB Wi-Fi adapter for the drone; Ethernet to the router |
+| Calibration target | Printed checkerboard |
+| Landing experiment | AprilTag and a proposed rotating platform |
+
+## Software stack
+
+- Python for drone communication, control, recording, and the Windows bridge.
+- C and VitaSDK for the PS Vita homebrew application.
+- C++ and ORB-SLAM3 for live monocular visual SLAM.
+- OpenCV for image processing and camera calibration.
+- WSL2 Ubuntu for the SLAM worker and its dependencies.
+- Pangolin for optional SLAM visualisation.
+- GitHub Actions for building the Vita application.
 
 ## Quick start
 
-```
+Create a Python virtual environment and install the project dependencies:
+
+**Windows PowerShell**
+
+```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
-python python\test_drone.py           # tests that need no drone
-python python\teleop.py               # keyboard teleop with live video (props off first!)
-python python\bridge.py               # Vita bridge; then start the app on the Vita
 ```
 
-The Vita app is built by GitHub Actions (`.github/workflows/build-vita.yml`); see [`vita/README.md`](vita/README.md) for installing it.
+Run the available non-flight tests:
+
+```powershell
+python python\test_drone.py
+```
+
+Start keyboard teleoperation:
+
+```powershell
+python python\teleop.py
+```
+
+Start the PS Vita bridge:
+
+```powershell
+python python\bridge.py
+```
+
+Then launch the corresponding homebrew application on the Vita.
+
+**Live SLAM setup:** the live SLAM pipeline additionally requires ORB-SLAM3, its vocabulary and compatible settings, a built C++ worker, and the WSL2 receiver. Consult [`docs/slam_walkthrough.md`](docs/slam_walkthrough.md) for the project's SLAM setup. Build and runtime commands may depend on your local paths and installed dependencies.
+
+The Vita application is built by [GitHub Actions](.github/workflows/build-vita.yml). See [`vita/README.md`](vita/README.md) for installation instructions.
 
 ## Repository layout
 
-```
-docs/           protocol notes and the SLAM walkthrough
-python/         control library, teleop, Vita bridge, calibration and SLAM tools, tests
-vita/           PS Vita app (C, VitaSDK), icon and LiveArea files
-tools/          early test scripts used while decoding the protocol
-.github/        build workflow for the Vita app
+```text
+docs/           Protocol documentation and SLAM walkthrough
+python/         Drone control, keyboard teleop, Vita bridge, tests and SLAM tools
+cpp/            C++ live ORB-SLAM3 worker
+vita/           PS Vita application source and build assets
+tools/          Early protocol investigation scripts
+.github/        GitHub Actions workflows
 ```
 
-## Roadmap
+Recorded frames, trajectories, local build products, and machine-specific configuration belong in local development storage, not in version control.
 
-- [ ] Weigh drone and note specs
-- [x] Capture app traffic (Wireshark + BlueStacks)
+## Development roadmap
+
+### Control and integration
+
+- [x] Capture and investigate official-app traffic
 - [x] Document control packet format
 - [x] Document video stream format
-- [x] Control the drone from Python (keyboard)
-- [x] Add failsafes (deadman timeout, throttle limit)
-- [x] Display live video in OpenCV
-- [x] Vita controller app (sticks, buttons, trim, telemetry)
-- [x] Camera picture on the Vita
-- [x] SLAM tools: calibration, flight recording, ORB-SLAM3 sequence converter
-- [ ] Test the bridge failsafe on the real drone (props off)
-- [ ] Calibrate camera (checkerboard)
-- [ ] Run ORB-SLAM3 offline on recorded flights
-- [ ] Live SLAM while flying with the Vita
-- [ ] Evaluate against a known floor path
-- [ ] Bottom camera: AprilTag detection / landing
-- [ ] Demo video of the Vita flying the drone
-- [ ] Stretch: ROS 2 wrapper (/cmd_vel, /image_raw)
-- [ ] Stretch: IMU logger and monocular-inertial SLAM
+- [x] Control the drone from Python
+- [x] Implement staged control failsafes
+- [x] Display live video on the PC
+- [x] Build the PS Vita controller app
+- [x] Display camera video on the Vita
+- [ ] Validate the bridge failsafe with propellers removed
+
+### Visual SLAM
+
+- [x] Implement calibration and recording tools
+- [x] Implement an ORB-SLAM3 sequence converter
+- [x] Forward live camera frames from Windows to WSL2
+- [x] Build the C++ live SLAM worker
+- [x] Demonstrate live monocular SLAM initialization under suitable lighting
+- [ ] Validate calibration against a checkerboard dataset
+- [ ] Evaluate tracking loss and recovery over repeated runs
+- [ ] Compare trajectories against a measured reference path
+- [ ] Measure latency and end-to-end frame rate
+- [ ] Evaluate trajectory scale and accuracy
+
+### Landing and autonomy
+
+- [ ] Decode or otherwise establish a reliable front/bottom camera switching method
+- [ ] Capture and validate downward-camera footage
+- [ ] Implement AprilTag detection and relative pose estimation
+- [ ] Estimate rotating-platform motion
+- [ ] Test a bounded landing controller in a safe, staged setup
+- [ ] Record a reproducible project demonstration
+
+### Stretch goals
+
+- [ ] ROS 2 integration (`/cmd_vel`, `/image_raw`)
+- [ ] IMU logging and monocular-inertial SLAM investigation
 
 ## Protocol notes
 
-Short version; the full byte-level notes, how each item was checked, and what is still unknown are in [`docs/protocol.md`](docs/protocol.md).
+The full packet descriptions, observations, and unresolved questions are documented in [`docs/protocol.md`](docs/protocol.md).
 
-| | |
+| Item | Current understanding |
 |---|---|
-| Drone address | `192.168.4.153` (the drone is the Wi-Fi access point) |
-| Video | Start with the bytes `42 76` to UDP port 8080. The drone sends MJPEG as UDP packets with an 8-byte header; frames are the JPEGs between `FF D8` and `FF D9` |
-| Control | UDP port 8090. 20-byte packets about 50 times a second: `66 14`, roll, pitch, throttle, yaw, flags, padding, checksum, `99` |
-| Checksum | XOR of the data bytes, nudged by one if it would equal a framing byte (`66` or `99`) |
-| Idle packet | `AA 80 80 00 80 00 80 55` about every 0.78 s before control starts |
-| Centre values | `0x80` on every stick (including throttle in the app's "stay high" mode) |
-| Takeoff / land / emergency | Flag bits held for about one second |
-| Not decoded | Camera switch (front / bottom), the meaning of the drone's 8-byte replies |
+| Drone address | `192.168.4.153` when connected to the drone's Wi-Fi network |
+| Video start | Bytes `42 76` sent to UDP port `8080` |
+| Video stream | MJPEG over UDP, with an 8-byte packet header |
+| Control | UDP port `8090`; 20-byte packets at approximately 50 Hz |
+| Control framing | Starts with `66 14`; ends with `99` |
+| Checksum | XOR-based checksum with special handling for framing-byte values |
+| Camera switching | Front/bottom switching protocol remains unresolved |
+| Drone replies | Meaning of the 8-byte replies remains unresolved |
 
-## Results
+These are reverse-engineering findings for this particular drone and firmware, not a claim that all E4-style drones use the same protocol.
 
-Measured so far (more to come as calibration and SLAM are run):
+## Results so far
 
 | Measurement | Result |
 |---|---|
-| Video stream | 640x480 JPEG; about 8-10 complete frames per second; 73-84 % of frames arrive complete (12 windows of 5 s, drone on a desk) |
-| Control rate | about 50 packets per second (20-byte format) |
-| Flight | Takeoff, landing, climb, descent and emergency stop confirmed with propellers fitted, from the keyboard and from the Vita |
-| Stick ranges | Throttle and yaw needed larger ranges than roll and pitch to react (see `docs/protocol.md`) |
-| Drift | The drone drifts around while hovering: it has no position hold. Effect of trim and calibration: _not yet recorded_ |
-| Automated tests | 63 tests, none needing the drone (21 control library, 15 Vita bridge, 9 video, 8 C-versus-Python messages, 10 SLAM tools) |
-| Camera calibration | _TBD_ (reprojection error, focal length) |
-| SLAM | _TBD_ (tracking-loss rate, trajectory against the taped floor path) |
-| Latency (video, control) | _not measured yet_ |
-| Bridge failsafe on the real drone | _props-off test not done yet_ |
+| Camera image size | 640 × 480 JPEG |
+| Observed video rate | Approximately 8–10 complete frames per second in desk tests |
+| Complete-frame rate | Approximately 73–84% across 12 five-second observation windows |
+| Control packet rate | Approximately 50 packets per second |
+| Flight controls | Takeoff, landing, climb, descent, and emergency-stop commands tested |
+| SLAM input | Live frames successfully forwarded to the WSL2 worker |
+| SLAM initialisation | Achieved under suitable lighting and visual-texture conditions |
+| SLAM accuracy | Not yet quantitatively validated against a reference trajectory |
+| Metric scale | Not yet independently validated |
+| Landing performance | Not implemented or evaluated |
+| End-to-end latency | Not yet measured |
 
-What failed or surprised me is written down in `docs/protocol.md`: control packets sent to the wrong port were ignored, throttle 0 meant "stick down", and a script that just stopped sending left the drone running.
+SLAM performance is sensitive to illumination, image texture, motion, and camera calibration. Monocular SLAM also has an inherent scale ambiguity unless additional information constrains scale.
 
 ## Safety
 
-- Test with the propellers removed until a new feature is confirmed.
-- The drone does not stop by itself when packets stop. The software therefore sends the stop itself: sticks go neutral after 0.3 s without commands, a land command after 1.5 s, and an emergency motor cut after 5 s. `close()` always sends the emergency stop.
-- Fly in a clear, controlled space, indoors, with a net if you can.
-- Check the current UK CAA rules before flying outdoors.
+- Remove the propellers while developing and testing new features.
+- Do not assume the drone stops when communication is interrupted. The control software implements staged neutral-stick, landing, and emergency-stop behaviour, but the complete bridge failsafe still requires validation on the actual drone.
+- Test flight behaviour only in a suitable, clear and controlled area after the relevant failsafes have been verified.
+- Check the current UK CAA requirements before outdoor operation.
+- Treat SLAM output as experimental until position accuracy, tracking-loss behaviour, and recovery conditions have been measured.
 
 ## Acknowledgements
 
-- **opendrone** by EinarTheSad: the small open-source viewer for these drones that gave me the video start command and packet layout.
-- **VitaSDK** and the **vitasdk samples** (the `debugScreen` helper), **VitaShell** and the PS Vita homebrew community.
-- **ORB-SLAM3** (UZ-SLAMLab), **OpenCV** and **COLMAP** for the SLAM side.
-- **Wireshark** and **jadx**: used to study the official WIFI_CAM app's traffic and structure so I could talk to my own drone. No code from the official app is included in this repository.
+- **opendrone** by EinarTheSad — useful reference material for investigating the drone video handshake and packet layout.
+- **VitaSDK**, its samples, **VitaShell**, and the PS Vita homebrew community.
+- **ORB-SLAM3** by UZ-SLAMLab, **OpenCV**, **Pangolin**, and **COLMAP**.
+- **Wireshark** and **jadx** for investigating the official application's traffic and structure.
+
+No code from the official `WIFI_CAM` application is included in this repository.
 
 ## License
 
