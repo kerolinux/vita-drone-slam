@@ -4,7 +4,7 @@ Reverse-engineering a low-cost E4 Wi-Fi camera drone (official app: `WIFI_CAM`),
 
 The project combines drone protocol analysis, Python control, PS Vita homebrew, live camera streaming, and robotics perception. The longer-term goal is to build toward vision-assisted landing on a rotating platform.
 
-[Watch the project demo](https://github.com/user-attachments/assets/efbb8a70-ea3d-4095-aed1-51404e11730f)
+[Watch the project demo](https://github.com/user-attachments/assets/ae998638-6149-4a7e-8dea-fff653482aef)
 
 ## Project status
 
