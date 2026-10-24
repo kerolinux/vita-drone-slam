@@ -141,7 +141,7 @@ Recorded frames, trajectories, local build products, and machine-specific config
 - [x] Display live video on the PC
 - [x] Build the PS Vita controller app
 - [x] Display camera video on the Vita
-- [ ] Validate the bridge failsafe with propellers removed
+- [x] Validate the bridge failsafe with propellers removed
 
 ### Visual SLAM
 
@@ -150,7 +150,7 @@ Recorded frames, trajectories, local build products, and machine-specific config
 - [x] Forward live camera frames from Windows to WSL2
 - [x] Build the C++ live SLAM worker
 - [x] Demonstrate live monocular SLAM initialization under suitable lighting
-- [ ] Validate calibration against a checkerboard dataset
+- [x] Validate calibration against a checkerboard dataset
 - [ ] Evaluate tracking loss and recovery over repeated runs
 - [ ] Compare trajectories against a measured reference path
 - [ ] Measure latency and end-to-end frame rate
