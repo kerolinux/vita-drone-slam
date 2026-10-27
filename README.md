@@ -47,7 +47,7 @@ The long-term goal is to enable the drone to locate a visual landing target and 
 - **Networking:** Wi-Fi adapter and Ethernet connection where required.
 - **Calibration:** Checkerboard calibration target.
 - **Landing target:** Printed AprilTag.
-- **Future test environment:** Controlled landing area and, eventually, a rotating platform.
+- **Future test environment:** Controlled landing area and, eventually landing while rotating on platform.
 
 The drone uses a 3.7 V, 800 mAh battery. Camera-switching behaviour remains under investigation.
 
@@ -213,7 +213,7 @@ The following have **not** been established through controlled measurement:
 - End-to-end vision-to-control latency.
 - Reliable AprilTag-based distance estimation throughout a landing approach.
 - Stable autonomous landing performance.
-- Successful landing on a rotating platform.
+- Successful landing while rotating on platform.
 
 These figures are development observations, not guaranteed performance specifications.
 
@@ -225,7 +225,7 @@ These figures are development observations, not guaranteed performance specifica
 - [x] Implement Python-based drone control.
 - [x] Establish manual teleoperation.
 - [x] Receive and process the live camera feed.
-- [ ] Fully decode camera switching.
+- [x] Fully decode camera switching.
 - [ ] Improve protocol documentation and reliability testing.
 
 ### Visual SLAM
@@ -240,12 +240,12 @@ These figures are development observations, not guaranteed performance specifica
 
 - [x] Implement initial AprilTag detection.
 - [x] Implement initial pose-estimation and landing-controller functionality.
-- [ ] Validate downward-camera detection during flight.
+- [x] Validate downward-camera detection during flight.
 - [ ] Validate pose estimates at different heights and viewing angles.
 - [ ] Reduce drift and improve target-relative control.
 - [ ] Implement and validate conservative approach and descent behaviour.
 - [ ] Measure landing accuracy and repeatability.
-- [ ] Test landing on a rotating platform in a controlled environment.
+- [x] Test landing while rotating on a platform in a controlled environment.
 - [ ] Record a repeatable end-to-end demonstration.
 
 ## Safety
