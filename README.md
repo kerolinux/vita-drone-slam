@@ -1,227 +1,280 @@
+
 # vita-drone-slam
 
-Reverse-engineering a low-cost E4 Wi-Fi camera drone (official app: `WIFI_CAM`), controlling it from a PlayStation Vita, and experimenting with monocular visual SLAM using ORB-SLAM3.
+Reverse-engineering and developing a low-cost E4 Wi-Fi camera drone for PS Vita teleoperation, monocular visual SLAM, AprilTag-based landing, and autonomous flight experiments.
 
-The project combines drone protocol analysis, Python control, PS Vita homebrew, live camera streaming, and robotics perception. The longer-term goal is to build toward vision-assisted landing on a rotating platform.
+The long-term goal is to enable the drone to locate a visual landing target and land on a rotating platform using onboard camera feedback and a vision-guided control system.
 
-[Watch the project demo](https://github.com/user-attachments/assets/ae998638-6149-4a7e-8dea-fff653482aef)
+## Demo
 
-## Project status
+[Watch the project demonstration](https://github.com/user-attachments/assets/ae998638-6149-4a7e-8dea-fff653482aef)
 
-- **Drone control:** decoded control packets and working Python keyboard and PS Vita control.
-- **Live video:** drone camera stream displayed on the PC and PS Vita.
-- **ORB-SLAM3:** live camera frames forwarded from Windows to an ORB-SLAM3 worker in WSL2. SLAM initialization and visualisation have been demonstrated under suitable lighting.
-- **Camera calibration:** calibration parameters are configured; their accuracy still needs independent validation.
-- **Autonomous landing:** planned. Downward-camera switching, AprilTag-based relative pose estimation, and rotating-platform landing have not yet been implemented.
+## Project Status
+
+| Component | Status |
+|---|---|
+| Drone communication and control | Implemented |
+| PS Vita teleoperation | Implemented |
+| Wi-Fi video reception | Implemented |
+| ORB-SLAM3 integration | Working experimentally |
+| Camera calibration | Available; further validation required |
+| AprilTag detection and pose estimation | Implemented experimentally |
+| Autonomous landing controller | Initial implementation; requires flight validation |
+| Stable vision-guided landing | Not yet validated |
+| Rotating-platform landing | Future validation target |
+
+**Current limitation:** The drone can drift significantly during landing attempts. Reliable target-relative positioning, controller tuning, and controlled flight testing are still required before autonomous landing can be considered successful.
 
 ## Features
 
-- **Protocol reverse engineering:** control and video packet formats investigated using captures from the official app and the open-source `opendrone` viewer. See [`docs/protocol.md`](docs/protocol.md).
-- **Python control library:** `python/drone.py` sends control packets at approximately 50 Hz and implements a staged failsafe.
-- **Keyboard teleoperation:** `python/teleop.py` provides keyboard control and live video.
-- **PS Vita controller:** `vita/` and `python/bridge.py` connect a Vita homebrew controller to the drone, with sticks, buttons, trim, telemetry, and camera video.
-- **Camera and SLAM tools:** calibration, recording, dataset conversion, and live frame forwarding to ORB-SLAM3.
-- **Live monocular SLAM:** C++ worker based on ORB-SLAM3, with trajectory output and an optional Pangolin visualiser.
-
-## System overview
-
-```text
-                 Wi-Fi
-PS Vita <----------------------> Router
-                                    |
-                                  Ethernet
-                                    |
-                                    v
-                               Windows PC
-                                    |
-                          USB Wi-Fi adapter
-                                    |
-                                    v
-                              E4 Wi-Fi drone
-                                    |
-                               Camera video
-                                    |
-                                    v
-                          Python bridge (Windows)
-                                    |
-                             TCP frame stream
-                                    |
-                                    v
-                               WSL2 Ubuntu
-                                    |
-                                    v
-                               ORB-SLAM3
-                                    |
-                           Pose / trajectory output
-```
-
-The PC connects to the drone through a USB Wi-Fi adapter while remaining connected to the local network over Ethernet. The Vita joins the same local network. The bridge forwards camera frames to the SLAM worker running inside WSL2.
+- Reverse-engineered the drone's Wi-Fi communication protocol.
+- Python-based drone control and telemetry.
+- PS Vita-based manual teleoperation.
+- Live video reception from the drone's Wi-Fi camera.
+- ORB-SLAM3 integration for monocular visual SLAM.
+- Camera calibration and image-processing tools.
+- AprilTag detection and pose-estimation experiments.
+- Initial autonomous landing controller.
+- Experimental separation between manual teleoperation and autonomous control.
+- Documentation and tests for landing-related functionality.
 
 ## Hardware
 
-| Component | Details |
-|---|---|
-| Drone | E4 Wi-Fi camera drone, official app `WIFI_CAM` |
-| Cameras | Front-facing and downward-facing cameras; switching protocol not yet decoded |
-| Battery | Labelled 3.7 V, 800 mAh (2.96 Wh) |
-| Controller | PS Vita running homebrew |
-| PC | Windows 11 with WSL2 Ubuntu |
-| Wireless connection | USB Wi-Fi adapter for the drone; Ethernet to the router |
-| Calibration target | Printed checkerboard |
-| Landing experiment | AprilTag and a proposed rotating platform |
+- **Drone:** E4 Wi-Fi camera drone.
+- **Cameras:** Front-facing camera and downward-facing camera.
+- **Controller:** Sony PS Vita.
+- **Computer:** Windows 11 with WSL2 and Ubuntu.
+- **Networking:** Wi-Fi adapter and Ethernet connection where required.
+- **Calibration:** Checkerboard calibration target.
+- **Landing target:** Printed AprilTag.
+- **Future test environment:** Controlled landing area and, eventually, a rotating platform.
 
-## Software stack
+The drone uses a 3.7 V, 800 mAh battery. Camera-switching behaviour remains under investigation.
 
-- Python for drone communication, control, recording, and the Windows bridge.
-- C and VitaSDK for the PS Vita homebrew application.
-- C++ and ORB-SLAM3 for live monocular visual SLAM.
-- OpenCV for image processing and camera calibration.
-- WSL2 Ubuntu for the SLAM worker and its dependencies.
-- Pangolin for optional SLAM visualisation.
-- GitHub Actions for building the Vita application.
+## Software Stack
 
-## Quick start
+- Python
+- C and VitaSDK
+- C++ and ORB-SLAM3
+- OpenCV
+- AprilTag detection and pose estimation
+- Ubuntu on WSL2
+- Pangolin
+- Wireshark
+- Git and GitHub Actions
 
-Create a Python virtual environment and install the project dependencies:
+## Repository Structure
 
-**Windows PowerShell**
+```text
+vita-drone-slam/
+├── docs/
+│   ├── autonomous_landing.md
+│   └── slam_walkthrough.md
+├── python/
+│   ├── drone.py
+│   ├── teleop.py
+│   ├── bridge.py
+│   ├── apriltag_detect.py
+│   ├── apriltag_detect_bottom.py
+│   ├── autonomous_land.py
+│   └── test_autonomous_land.py
+├── cpp/
+├── vita/
+├── tools/
+├── requirements.txt
+└── README.md
+```
+
+Additional calibration scripts, datasets, logs, and local development files may be present in the working directory but are not necessarily tracked in Git.
+
+## Getting Started
+
+### 1. Set up Python
+
+Run the following commands in PowerShell from the repository root:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Run the available non-flight tests:
+If PowerShell blocks virtual-environment activation, use an appropriate execution policy for your environment or run the environment's Python executable directly.
+
+### 2. Test drone communication
 
 ```powershell
 python python\test_drone.py
 ```
 
-Start keyboard teleoperation:
+### 3. Start manual teleoperation
 
 ```powershell
 python python\teleop.py
 ```
 
-Start the PS Vita bridge:
+### 4. Start the bridge
 
 ```powershell
 python python\bridge.py
 ```
 
-Then launch the corresponding homebrew application on the Vita.
+Follow the relevant documentation for the PS Vita connection and network configuration.
 
-**Live SLAM setup:** the live SLAM pipeline additionally requires ORB-SLAM3, its vocabulary and compatible settings, a built C++ worker, and the WSL2 receiver. Consult [`docs/slam_walkthrough.md`](docs/slam_walkthrough.md) for the project's SLAM setup. Build and runtime commands may depend on your local paths and installed dependencies.
+## Visual SLAM
 
-The Vita application is built by [GitHub Actions](.github/workflows/build-vita.yml). See [`vita/README.md`](vita/README.md) for installation instructions.
+The project integrates ORB-SLAM3 with the drone's live camera feed. Frames are forwarded from the Windows-side video receiver to the SLAM environment running under WSL2.
 
-## Repository layout
+See [`docs/slam_walkthrough.md`](docs/slam_walkthrough.md) for setup and execution instructions.
 
-```text
-docs/           Protocol documentation and SLAM walkthrough
-python/         Drone control, keyboard teleop, Vita bridge, tests and SLAM tools
-cpp/            C++ live ORB-SLAM3 worker
-vita/           PS Vita application source and build assets
-tools/          Early protocol investigation scripts
-.github/        GitHub Actions workflows
+The current SLAM implementation is experimental. Tracking quality depends on lighting, scene texture, camera motion, calibration, and initialization. Monocular SLAM does not inherently provide absolute metric scale.
+
+## AprilTag Detection and Autonomous Landing
+
+The landing experiments use AprilTags as visual references for estimating the target's relative pose.
+
+Relevant files:
+
+- `python/apriltag_detect.py` — AprilTag detection using the available camera feed.
+- `python/apriltag_detect_bottom.py` — detection experiments for the downward-facing camera.
+- `python/autonomous_land.py` — initial autonomous landing controller.
+- `python/test_autonomous_land.py` — tests for landing-controller functionality.
+- `docs/autonomous_landing.md` — landing experiment documentation.
+
+The intended workflow is:
+
+1. Receive camera frames from the drone.
+2. Detect an AprilTag in the image.
+3. Estimate the tag's relative pose using camera calibration.
+4. Use visual feedback to guide the drone toward the target.
+5. Reduce motion and descend only when the target-relative estimate is sufficiently reliable.
+
+This is an experimental workflow, not a claim of reliable autonomous flight. Detection alone does not guarantee accurate distance estimation or stable control. Camera calibration, tag visibility, coordinate-frame conventions, control latency, and the drone's flight dynamics all affect performance.
+
+**Known issue:** The drone has shown significant drift during landing attempts. The controller must be validated in a controlled environment before further autonomous flight testing.
+
+For additional details, see [`docs/autonomous_landing.md`](docs/autonomous_landing.md).
+
+## Development and Testing
+
+Run the landing-controller tests from the repository root:
+
+```powershell
+python -m pytest python\test_autonomous_land.py -v
 ```
 
-Recorded frames, trajectories, local build products, and machine-specific configuration belong in local development storage, not in version control.
+These tests are intended to check controller behaviour in software. Passing software tests does not establish that the drone can land safely in real flight.
 
-## Development roadmap
+Before committing changes, inspect the staged and unstaged files:
 
-### Control and integration
+```powershell
+git status
+git diff
+git diff --cached
+```
 
-- [x] Capture and investigate official-app traffic
-- [x] Document control packet format
-- [x] Document video stream format
-- [x] Control the drone from Python
-- [x] Implement staged control failsafes
-- [x] Display live video on the PC
-- [x] Build the PS Vita controller app
-- [x] Display camera video on the Vita
-- [x] Validate the bridge failsafe with propellers removed
+Avoid committing virtual environments, generated logs, raw datasets, or local calibration outputs unless they are deliberately part of the project.
+
+## Reverse-Engineered Protocol Notes
+
+The following observations were recorded during development. They describe the current findings, not a complete specification of the drone's protocol.
+
+| Item | Observation |
+|---|---|
+| Drone address | `192.168.4.153` |
+| Video port | UDP `8080` |
+| Video start command | `42 76` |
+| Video stop command | `42 77` |
+| Video format | MJPEG over UDP, with an 8-byte packet header |
+| Control port | UDP `8090` |
+| Control packet framing | `66 14` prefix and `99` terminator |
+| Control checksum | XOR-based checksum observed |
+| Camera switching | Not fully decoded |
+| Additional 8-byte replies | Not fully understood |
+
+The control stream has been observed at approximately 50 packets per second. Further protocol analysis may be required to understand all packet types and camera-switching behaviour.
+
+## Experimental Results
+
+Observed results from development testing include:
+
+- Camera frames at 640 × 480 resolution.
+- Approximately 8–10 complete video frames per second in earlier capture tests.
+- Complete-frame rates of approximately 73–84% across twelve five-second measurement windows.
+- Control packets observed at approximately 50 packets per second.
+- Manual flight controls tested.
+- Live camera frames forwarded to the ORB-SLAM3 pipeline.
+- SLAM initialization achieved under suitable lighting and scene conditions.
+
+The following have **not** been established through controlled measurement:
+
+- Absolute SLAM accuracy or metric scale.
+- End-to-end vision-to-control latency.
+- Reliable AprilTag-based distance estimation throughout a landing approach.
+- Stable autonomous landing performance.
+- Successful landing on a rotating platform.
+
+These figures are development observations, not guaranteed performance specifications.
+
+## Roadmap
+
+### Drone Control and Networking
+
+- [x] Reverse-engineer core video and control communication.
+- [x] Implement Python-based drone control.
+- [x] Establish manual teleoperation.
+- [x] Receive and process the live camera feed.
+- [ ] Fully decode camera switching.
+- [ ] Improve protocol documentation and reliability testing.
 
 ### Visual SLAM
 
-- [x] Implement calibration and recording tools
-- [x] Implement an ORB-SLAM3 sequence converter
-- [x] Forward live camera frames from Windows to WSL2
-- [x] Build the C++ live SLAM worker
-- [x] Demonstrate live monocular SLAM initialization under suitable lighting
-- [x] Validate calibration against a checkerboard dataset
-- [ ] Evaluate tracking loss and recovery over repeated runs
-- [ ] Compare trajectories against a measured reference path
-- [ ] Measure latency and end-to-end frame rate
-- [ ] Evaluate trajectory scale and accuracy
+- [x] Integrate ORB-SLAM3.
+- [x] Forward live camera frames to the SLAM pipeline.
+- [ ] Improve calibration and validate tracking accuracy.
+- [ ] Measure tracking stability under different lighting and motion conditions.
+- [ ] Evaluate end-to-end latency.
 
-### Landing and autonomy
+### AprilTag Landing
 
-- [ ] Decode or otherwise establish a reliable front/bottom camera switching method
-- [ ] Capture and validate downward-camera footage
-- [ ] Implement AprilTag detection and relative pose estimation
-- [ ] Estimate rotating-platform motion
-- [ ] Test a bounded landing controller in a safe, staged setup
-- [ ] Record a reproducible project demonstration
-
-### Stretch goals
-
-- [ ] ROS 2 integration (`/cmd_vel`, `/image_raw`)
-- [ ] IMU logging and monocular-inertial SLAM investigation
-
-## Protocol notes
-
-The full packet descriptions, observations, and unresolved questions are documented in [`docs/protocol.md`](docs/protocol.md).
-
-| Item | Current understanding |
-|---|---|
-| Drone address | `192.168.4.153` when connected to the drone's Wi-Fi network |
-| Video start | Bytes `42 76` sent to UDP port `8080` |
-| Video stream | MJPEG over UDP, with an 8-byte packet header |
-| Control | UDP port `8090`; 20-byte packets at approximately 50 Hz |
-| Control framing | Starts with `66 14`; ends with `99` |
-| Checksum | XOR-based checksum with special handling for framing-byte values |
-| Camera switching | Front/bottom switching protocol remains unresolved |
-| Drone replies | Meaning of the 8-byte replies remains unresolved |
-
-These are reverse-engineering findings for this particular drone and firmware, not a claim that all E4-style drones use the same protocol.
-
-## Results so far
-
-| Measurement | Result |
-|---|---|
-| Camera image size | 640 × 480 JPEG |
-| Observed video rate | Approximately 8–10 complete frames per second in desk tests |
-| Complete-frame rate | Approximately 73–84% across 12 five-second observation windows |
-| Control packet rate | Approximately 50 packets per second |
-| Flight controls | Takeoff, landing, climb, descent, and emergency-stop commands tested |
-| SLAM input | Live frames successfully forwarded to the WSL2 worker |
-| SLAM initialisation | Achieved under suitable lighting and visual-texture conditions |
-| SLAM accuracy | Not yet quantitatively validated against a reference trajectory |
-| Metric scale | Not yet independently validated |
-| Landing performance | Not implemented or evaluated |
-| End-to-end latency | Not yet measured |
-
-SLAM performance is sensitive to illumination, image texture, motion, and camera calibration. Monocular SLAM also has an inherent scale ambiguity unless additional information constrains scale.
+- [x] Implement initial AprilTag detection.
+- [x] Implement initial pose-estimation and landing-controller functionality.
+- [ ] Validate downward-camera detection during flight.
+- [ ] Validate pose estimates at different heights and viewing angles.
+- [ ] Reduce drift and improve target-relative control.
+- [ ] Implement and validate conservative approach and descent behaviour.
+- [ ] Measure landing accuracy and repeatability.
+- [ ] Test landing on a rotating platform in a controlled environment.
+- [ ] Record a repeatable end-to-end demonstration.
 
 ## Safety
 
-- Remove the propellers while developing and testing new features.
-- Do not assume the drone stops when communication is interrupted. The control software implements staged neutral-stick, landing, and emergency-stop behaviour, but the complete bridge failsafe still requires validation on the actual drone.
-- Test flight behaviour only in a suitable, clear and controlled area after the relevant failsafes have been verified.
-- Check the current UK CAA requirements before outdoor operation.
-- Treat SLAM output as experimental until position accuracy, tracking-loss behaviour, and recovery conditions have been measured.
+This project involves an experimental aircraft and unvalidated autonomous control.
+
+- Remove the propellers during bench testing whenever possible.
+- Test flight-control changes in a clear, controlled area.
+- Keep manual control and a reliable means of stopping the experiment available.
+- Do not assume software tests prove that flight is safe.
+- Validate emergency-stop, failsafe, and landing behaviour before autonomous flight.
+- Check applicable UK Civil Aviation Authority rules before flying.
+- Do not test autonomous landing near people, animals, roads, or fragile objects.
+
+The landing controller is experimental and must not be treated as a safety-certified system.
 
 ## Acknowledgements
 
-- **opendrone** by EinarTheSad — useful reference material for investigating the drone video handshake and packet layout.
-- **VitaSDK**, its samples, **VitaShell**, and the PS Vita homebrew community.
-- **ORB-SLAM3** by UZ-SLAMLab, **OpenCV**, **Pangolin**, and **COLMAP**.
-- **Wireshark** and **jadx** for investigating the official application's traffic and structure.
+This project builds on open-source tools and community work, including:
 
-No code from the official `WIFI_CAM` application is included in this repository.
+- [opendrone](https://github.com/EinarTheSad/opendrone) by EinarTheSad.
+- [VitaSDK](https://vitasdk.org/) and VitaShell.
+- [ORB-SLAM3](https://github.com/UZ-SLAMLab/ORB_SLAM3).
+- [OpenCV](https://opencv.org/).
+- [Pangolin](https://github.com/stevenlovegrove/Pangolin).
+- Wireshark and other protocol-analysis tools.
+
+No official `WIFI_CAM` application source code is included in this repository.
 
 ## License
 
-MIT
+See the repository's `LICENSE` file for licensing terms.
