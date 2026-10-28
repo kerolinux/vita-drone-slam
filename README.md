@@ -154,6 +154,25 @@ This is an experimental workflow, not a claim of reliable autonomous flight. Det
 
 **Known issue:** The drone has shown significant drift during landing attempts. The controller must be validated in a controlled environment before further autonomous flight testing.
 
+### AprilTag Detection Demo
+
+This video demonstrates real-time AprilTag detection using the drone's camera feed, as an intermediate milestone toward vision-guided autonomous landing.
+
+**Demonstrated**
+- Real-time visual marker detection.
+- AprilTag identification in the camera feed.
+
+**In development**
+- Reliable target-relative pose estimation.
+- Drift compensation and stable flight control.
+- Autonomous landing and rotating-platform landing experiments.
+
+
+https://github.com/user-attachments/assets/0a1ff7c5-a228-4d12-a979-7ccd8fa6eccf
+
+
+
+
 For additional details, see [`docs/autonomous_landing.md`](docs/autonomous_landing.md).
 
 ## Development and Testing
