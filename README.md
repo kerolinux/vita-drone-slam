@@ -286,11 +286,12 @@ The landing controller is experimental and must not be treated as a safety-certi
 This project builds on open-source tools and community work, including:
 
 - [opendrone](https://github.com/EinarTheSad/opendrone) by EinarTheSad.
-- [VitaSDK](https://vitasdk.org/) and VitaShell.
+- [VitaSDK](https://vitasdk.org/) and [VitaShell](https://github.com/TheOfficialFloW/VitaShell).
 - [ORB-SLAM3](https://github.com/UZ-SLAMLab/ORB_SLAM3).
 - [OpenCV](https://opencv.org/).
 - [Pangolin](https://github.com/stevenlovegrove/Pangolin).
-- Wireshark and other protocol-analysis tools.
+- [Wireshark](https://www.wireshark.org/) and other protocol-analysis tools.
+- [JADX](https://github.com/skylot/jadx) for Android application decompilation and inspection.
 
 No official `WIFI_CAM` application source code is included in this repository.
 
