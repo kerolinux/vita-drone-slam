@@ -77,6 +77,8 @@ vita-drone-slam/
 │   ├── apriltag_detect.py
 │   ├── apriltag_detect_bottom.py
 │   ├── autonomous_land.py
+│   ├── autonomous_land_main_cam.py
+│   ├── vita_takeover.py
 │   └── test_autonomous_land.py
 ├── cpp/
 ├── vita/
@@ -122,6 +124,14 @@ python python\bridge.py
 
 Follow the relevant documentation for the PS Vita connection and network configuration.
 
+### 5. Run autonomous landing (main camera)
+
+```powershell
+python python\autonomous_land_main_cam.py --live --vita-takeover
+```
+
+Keys: `T`/`Triangle` = manual takeoff, `A` = engage autonomous landing, `Q`/`Esc` = land, `X` = emergency stop. Runtime hotkeys: `r`/`p` flip roll/pitch sign, `[`/`]` roll trim, `;`/`'` pitch trim.
+
 ## Visual SLAM
 
 The project integrates ORB-SLAM3 with the drone's live camera feed. Frames are forwarded from the Windows-side video receiver to the SLAM environment running under WSL2.
@@ -138,8 +148,10 @@ Relevant files:
 
 - `python/apriltag_detect.py` — AprilTag detection using the available camera feed.
 - `python/apriltag_detect_bottom.py` — detection experiments for the downward-facing camera.
-- `python/autonomous_land.py` — initial autonomous landing controller.
-- `python/test_autonomous_land.py` — tests for landing-controller functionality.
+- `python/autonomous_land.py` — autonomous landing controller for the **bottom camera** (240×320).
+- `python/autonomous_land_main_cam.py` — **main camera** (640×480) landing with dual-camera auto-switch, PID edge-damping, platform detector fusion, blind landing commit, runtime sign/trim hotkeys.
+- `python/vita_takeover.py` — manual/auto arbitration: Vita Triangle = manual takeoff, PC 'A' = engage autonomous, stick movement = takeover.
+- `python/test_autonomous_land.py` — 25 tests covering PID, state machine, smoother, blind land.
 - `docs/autonomous_landing.md` — landing experiment documentation.
 
 The intended workflow is:
@@ -174,6 +186,80 @@ https://github.com/user-attachments/assets/0a1ff7c5-a228-4d12-a979-7ccd8fa6eccf
 
 
 For additional details, see [`docs/autonomous_landing.md`](docs/autonomous_landing.md).
+
+## PID Controller Tuning
+
+Both landing scripts use a `PIDController` class with anti-windup, deadband, and (for main camera) edge-damped gain scheduling.
+
+### Bottom Camera (`autonomous_land.py`)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `KP` | 0.45 | Proportional gain — immediate response to position error |
+| `KI` | 0.08 | Integral gain — eliminates steady-state drift |
+| `KD` | 0.12 | Derivative gain — damps oscillations |
+| `MAX_XY` | 0.30 | Max stick deflection (−1..1) |
+| `MAX_INTEGRAL` | 0.15 | Anti-windup clamp for integral term |
+| `DEADBAND` | 0.03 | Ignore tiny normalized errors |
+| `ALIGN_TOL` | 0.08 | Alignment tolerance for state transition |
+| `ALIGN_HOLD_S` | 1.0 | Must hold alignment this long before descend |
+| `DESCEND_THROTTLE` | −0.25 | Descent throttle (negative = down) |
+| `LAND_Z_M` | 0.20 | Trigger land when tag distance < this |
+
+```powershell
+# Override from command line
+python python\autonomous_land.py --live --kp 0.5 --kd 0.15 --max-xy 0.25
+```
+
+### Main Camera (`autonomous_land_main_cam.py`)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `KP` | 0.80 | Stronger proportional for drift rejection |
+| `KI` | 0.20 | Stronger integral to cancel steady wind |
+| `KD` | 0.10 | Base derivative |
+| `MAX_XY` | 0.25 | Limited authority for stability |
+| `MAX_INTEGRAL` | 0.15 | Anti-windup |
+| `DEADBAND` | 0.005 | Respond to very small errors |
+| `ALIGN_TOL` | 0.03 | Tight alignment before descend |
+| `ALIGN_HOLD_S` | 0.30 | Shorter hold — faster descent entry |
+| `DESCEND_ALIGN_TOL` | 0.04 | Strict during descent |
+| `DESCEND_HOLD_S` | 0.25 | Hold at land_z before LAND |
+| `DESCEND_THROTTLE` | −0.08 | Slow, controlled descent |
+| `LAND_Z_M` | 0.80 | Land trigger at higher altitude |
+| `BLIND_LAND_Z_M` | 0.95 | Commit to blind land below this |
+| `BLIND_LAND_MAX_S` | 1.2 | Max blind descent time |
+
+**Edge-damped gain scheduling** (main camera only): gains scale with tag proximity to image edge.
+
+| Multiplier | Value | Effect |
+|------------|-------|--------|
+| `EDGE_KP_MULT` | 1.0 | No KP boost at edges (prevents overshoot) |
+| `EDGE_KI_MULT` | 1.0 | No KI boost (prevents windup) |
+| `EDGE_KD_MULT` | 2.5 | **Strong KD damping** near edges |
+
+Edge thresholds (normalized image coords, 0=center, 1=edge):
+- `EDGE_WARN_THRESHOLD` = 0.60 — gentle correction starts
+- `EDGE_CRITICAL_THRESHOLD` = 0.80 — full damping active
+- `EDGE_LOST_THRESHOLD` = 0.95 — tag nearly out of view
+
+```powershell
+# Override from command line
+python python\autonomous_land_main_cam.py --live --vita-takeover --kp 0.7 --kd 0.15 --max-xy 0.2 --descend-throttle -0.1
+```
+
+### Runtime Hotkeys (main camera only)
+
+| Key | Action |
+|-----|--------|
+| `r` | Flip roll sign |
+| `p` | Flip pitch sign |
+| `[` | Roll trim left (−0.05) |
+| `]` | Roll trim right (+0.05) |
+| `;` | Pitch trim forward (−0.05) |
+| `'` | Pitch trim back (+0.05) |
+
+Signs and trims are printed on-screen during flight for verification.
 
 ## Development and Testing
 

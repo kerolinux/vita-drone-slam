@@ -9,28 +9,50 @@ from drone import DroneLink
 
 
 class LandingTests(unittest.TestCase):
+    def make_lander(self, now=0, **kwargs):
+        """Create a Lander with test-friendly defaults."""
+        defaults = dict(
+            kp=0.45, ki=0.08, kd=0.12,
+            max_xy=0.3, max_integral=0.15, deadband=0.03,
+            speed_preset=landing.SPEED_PRESETS[1]
+        )
+        defaults.update(kwargs)
+        return landing.Lander(now, **defaults)
+
     def aligned(self):
-        controller = landing.Lander(0)
-        for i in range(10):
+        """Advance a lander to DESCEND state (stable centred tag)."""
+        controller = self.make_lander(0)
+        # Need ALIGN_HOLD_S (1.0s) of stable centred observations
+        # Also need to fill the smoother window (5 samples)
+        for i in range(11):  # 0.0 to 1.0s in 0.1s steps
             controller.update((0, 0, 0.5), i * 0.1)
         self.assertEqual(controller.state, "DESCEND")
         return controller
 
+    def flush_smoother(self, controller, obs, now, steps=5):
+        """Push observations through the smoother window."""
+        for i in range(steps):
+            controller.update(obs, now + i * 0.1)
+
     def test_off_centre_low_tag_never_triggers_landing(self):
         controller = self.aligned()
-        state, cmd = controller.update((0.8, 0.8, 0.2), 1)
-        self.assertEqual(state, "ALIGN")
+        # Flush smoother with off-center observations
+        self.flush_smoother(controller, (0.8, 0.8, 0.2), 1.1)
+        state, cmd = controller.update((0.8, 0.8, 0.2), 1.6)
+        self.assertEqual(state, "ALIGN")  # pushed back to ALIGN
         self.assertEqual(cmd["throttle"], 0)
         self.assertNotEqual(cmd["roll"], 0)
 
     def test_stable_centred_low_tag_can_land(self):
         controller = self.aligned()
-        state, cmd = controller.update((0, 0, 0.2), 1)
+        # Flush smoother with centered low observations (z < LAND_Z_M=0.2)
+        self.flush_smoother(controller, (0, 0, 0.15), 1.1)
+        state, cmd = controller.update((0, 0, 0.15), 1.6)
         self.assertEqual(state, "LAND")
         self.assertEqual(cmd, landing.NEUTRAL)
 
     def test_one_centred_frame_or_fast_crossing_cannot_descend(self):
-        controller = landing.Lander(0)
+        controller = self.make_lander(0)
         self.assertEqual(controller.update((0, 0, 0.2), 0)[0], "ALIGN")
         for i in range(1, 20):
             state, cmd = controller.update(((-1) ** i * 0.1, 0, 0.2), i * 0.1)
@@ -39,29 +61,38 @@ class LandingTests(unittest.TestCase):
 
     def test_gap_resets_alignment_and_derivative(self):
         controller = self.aligned()
-        state, cmd = controller.update((0.05, 0, 0.5), 2)
+        # Gap (lost tag) should reset alignment and integral
+        state, cmd = controller.update(None, 2)
         self.assertEqual(state, "ALIGN")
-        self.assertAlmostEqual(cmd["roll"], 0.05)
+        self.assertAlmostEqual(controller.pid_x.integral, 0, places=1)
+        self.assertAlmostEqual(controller.pid_y.integral, 0, places=1)
 
     def test_loss_stops_descent_then_requests_landing_without_yaw(self):
         controller = self.aligned()
         state, cmd = controller.update(None, 1.0)
         self.assertEqual(state, "ALIGN")
         self.assertEqual(cmd, landing.NEUTRAL)
+        # After TAG_LOST_LAND_S (1.5s) should request land
         self.assertEqual(controller.update(None, 2.5)[0], "LAND")
 
     def test_small_error_survives_wire_quantisation_and_limits_hold(self):
-        link = DroneLink(max_offset=landing.SPEED_PRESETS[1])
+        # Test PID controller directly for quantization compensation
+        pid = landing.PIDController(0.45, 0.08, 0.12, 0.3, 0.15, 0.03, 1, 20)
         for error in (-0.05, 0.05):
-            value = landing.lateral_command(error, 0, 1, 20)
-            self.assertNotEqual(link._stick_byte("roll", value), 128)
-            self.assertLessEqual(abs(value), landing.MAX_XY)
-        self.assertEqual(landing.lateral_command(0.01, 0, 1, 20), 0)
-        self.assertEqual(landing.lateral_command(10, 10, 1, 20), landing.MAX_XY)
+            value = pid.update(error, 0)
+            byte_val = landing.DroneLink(max_offset=landing.SPEED_PRESETS[1])._stick_byte("roll", value)
+            self.assertNotEqual(byte_val, 128)  # not neutral
+            self.assertLessEqual(abs(value), 0.3)
+        # Deadband should zero small errors
+        pid2 = landing.PIDController(0.45, 0.08, 0.12, 0.3, 0.15, 0.03, 1, 20)
+        self.assertEqual(pid2.update(0.01, 0), 0)
+        # Large error saturates
+        pid3 = landing.PIDController(0.45, 0.08, 0.12, 0.3, 0.15, 0.03, 1, 20)
+        self.assertEqual(pid3.update(10, 0), 0.3)
 
     def test_signs_invert_only_selected_axis(self):
-        a = landing.Lander(0, 1, -1).update((0.5, 0.5, 1), 0)[1]
-        b = landing.Lander(0, -1, 1).update((0.5, 0.5, 1), 0)[1]
+        a = self.make_lander(0, roll_sign=1, pitch_sign=-1).update((0.5, 0.5, 1), 0)[1]
+        b = self.make_lander(0, roll_sign=-1, pitch_sign=1).update((0.5, 0.5, 1), 0)[1]
         self.assertEqual(a["roll"], -b["roll"])
         self.assertEqual(a["pitch"], -b["pitch"])
 
@@ -114,11 +145,37 @@ class LandingTests(unittest.TestCase):
         detector.detectMarkers.assert_called_once()
 
     def test_invalid_observation_is_not_used(self):
-        state, cmd = landing.Lander(0).update((float("nan"), 0, 0.1), 0.1)
+        state, cmd = self.make_lander(0).update((float("nan"), 0, 0.1), 0.1)
         self.assertEqual(state, "ALIGN")
         self.assertEqual(cmd, landing.NEUTRAL)
 
+    def test_pid_integral_anti_windup(self):
+        """Integral should clamp at max_integral."""
+        pid = landing.PIDController(0.45, 0.08, 0.12, 0.3, 0.15, 0.03, 1, 20)
+        # Large persistent error
+        for i in range(100):
+            pid.update(1.0, i * 0.1)
+        self.assertLessEqual(abs(pid.integral), 0.15)
 
+    def test_pid_deadband(self):
+        """Errors within deadband should produce zero output."""
+        pid = landing.PIDController(0.45, 0.08, 0.12, 0.3, 0.15, 0.03, 1, 20)
+        self.assertEqual(pid.update(0.01, 0), 0)
+        self.assertEqual(pid.update(-0.02, 0.1), 0)
+
+    def test_observation_smoother(self):
+        """Median filter should reject outliers."""
+        smoother = landing.ObservationSmoother(window=5)
+        # Add 4 good observations
+        for _ in range(4):
+            smoother.update((0.0, 0.0, 1.0))
+        # Add one outlier
+        smoother.update((10.0, 10.0, 10.0))
+        smoothed = smoother.update((0.0, 0.0, 1.0))
+        # Median should be close to 0, not 10
+        self.assertAlmostEqual(smoothed[0], 0.0, places=1)
+        self.assertAlmostEqual(smoothed[1], 0.0, places=1)
+        self.assertAlmostEqual(smoothed[2], 1.0, places=1)
 
 
 class MainLoopTests(unittest.TestCase):

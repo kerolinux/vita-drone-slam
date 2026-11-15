@@ -130,6 +130,7 @@ class DroneLink:
         self._emergency_until = 0.0
         self._last_heartbeat = time.monotonic()
         self._stage = 0
+        self._airborne = False
 
         self._frame = None
         self._seq = 0
@@ -221,6 +222,7 @@ class DroneLink:
             self._last_heartbeat = time.monotonic()
             self._stage = 0
 
+        
     def heartbeat(self):
         """Tell the failsafe the controller is alive, without changing the sticks."""
         with self._lock:
@@ -229,11 +231,40 @@ class DroneLink:
 
     def takeoff(self):
         with self._lock:
+            if time.monotonic() < self._emergency_until:
+                self._log("[drone] takeoff ignored: emergency stop in progress")
+                return False
+            if self.fmt == 20 and self._flag_pulse_pending():
+                self._log("[drone] takeoff ignored: the previous takeoff/land flag is still being sent")
+                return False
+            if self.fmt == 20 and self._airborne:
+                self._log("[drone] takeoff ignored: already airborne (send an emergency stop first if that is wrong)")
+                return False
             self._pulses["fly"] = PULSE_PACKETS[self.fmt]
+            self._airborne = True
+            return True
+
 
     def land(self):
+        
         with self._lock:
+            if self.fmt == 20 and self._flag_pulse_pending():
+                self._log("[drone] land ignored: the previous takeoff/land flag is still being sent")
+                return False
+            if self.fmt == 20 and not self._airborne:
+                self._log("[drone] land ignored: drone is on the ground (in this format it would take off)")
+                return False
             self._pulses["land"] = PULSE_PACKETS[self.fmt]
+            self._airborne = False
+            return True
+
+    def _flag_pulse_pending(self):
+        return "fly" in self._pulses or "land" in self._pulses
+
+    @property
+    def airborne(self):
+        with self._lock:
+            return self._airborne
 
     def calibrate(self):
         """Send the app's "checkout" flag (probably gyro calibration / trim reset). Drone on a level surface,
@@ -260,6 +291,7 @@ class DroneLink:
 
     def emergency_stop(self):
         with self._lock:
+            self._airborne  = False
             self._pulses.clear()
             self._emergency_until = time.monotonic() + EMERGENCY_SECONDS
 
@@ -273,6 +305,7 @@ class DroneLink:
         with self._lock:
             return {"mode": self._mode, "failsafe_stage": self._stage,
                     "emergency": time.monotonic() < self._emergency_until,
+                    "airborne": self._airborne,
                     "trim": dict(self._trim),
                     "heartbeat_age": time.monotonic() - self._last_heartbeat,
                     "frames_ok": self._counts["ok"], "frames_incomplete": self._counts["incomplete"],
@@ -313,8 +346,11 @@ class DroneLink:
                 self._log(f"[drone] no commands for {age:.1f}s -> failsafe stage {stage} "
                           f"({['', 'neutral sticks', 'land', 'emergency stop'][stage]})")
                 if stage == 2:
-                    self._pulses["land"] = PULSE_PACKETS[self.fmt]
+                    if self._airborne:                      # never "land" on the ground: it would take off
+                        self._pulses["land"] = PULSE_PACKETS[self.fmt]
+                        self._airborne = False
                 elif stage == 3:
+                    self._airborne = False
                     self._pulses.clear()
                     self._emergency_until = now + EMERGENCY_SECONDS
                     return [packet_20(flags=EMERGENCY_FLAG_20), packet_8(flags=EMERGENCY_FLAG_8)]

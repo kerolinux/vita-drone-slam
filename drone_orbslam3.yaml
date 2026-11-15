@@ -18,7 +18,7 @@ Camera1.p1: 0.008993
 Camera1.p2: -0.009062
 Camera1.k3: 0.395905
 
-Camera.fps: 8
+Camera.fps: 12
 
 # Color order of the images (0: BGR, 1: RGB). OpenCV reads BGR.
 Camera.RGB: 0
@@ -29,11 +29,11 @@ Camera.height: 480
 #--------------------------------------------------------------------------------------------
 # ORB parameters
 #--------------------------------------------------------------------------------------------
-ORBextractor.nFeatures: 1000
+ORBextractor.nFeatures: 1500
 ORBextractor.scaleFactor: 1.2
 ORBextractor.nLevels: 8
-ORBextractor.iniThFAST: 20
-ORBextractor.minThFAST: 7
+ORBextractor.iniThFAST: 12
+ORBextractor.minThFAST: 5
 
 #--------------------------------------------------------------------------------------------
 # Viewer parameters
